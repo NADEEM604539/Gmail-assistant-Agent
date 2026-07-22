@@ -5,16 +5,14 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from auth.auth_service import router
+from app.auth.auth_controller import router
 
-from database.database import Base
-from database.database import engine
+from app.database.database import Base
+from app.database.database import engine
 
-from database.models.users import User
+from app.database.models.users import User
 
 load_dotenv()
-
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
@@ -29,5 +27,10 @@ app.add_middleware(
 @app.get('/')
 def backend():
     return {'Hello world'}
+
+
+@app.on_event("startup")
+def create_tables() -> None:
+    Base.metadata.create_all(bind=engine)
 
 app.include_router(router, prefix='/api')

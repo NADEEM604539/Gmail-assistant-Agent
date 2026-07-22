@@ -3,7 +3,7 @@ from sqlalchemy import Integer
 from sqlalchemy import String
 from sqlalchemy import Boolean
 from sqlalchemy import Text
-from database import Base
+from app.database.database import Base
 
 
 class User(Base):

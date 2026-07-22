@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from auth_service import googleLogin
-from DTO import GoogleLoginRequest
+from app.auth.auth_service import googleLogin
+from app.auth.DTO import GoogleLoginRequest
 import os
 import httpx
 

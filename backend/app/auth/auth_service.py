@@ -1,17 +1,23 @@
 import os
-import httpx
-from sqlalchemy.orm import Session
-from database.database import get_db
-from fastapi import HTTPException, Depends
+from pathlib import Path
 
+import httpx
+from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+from app.database.database import SessionLocal
+from fastapi import HTTPException
+from sqlalchemy import text
+
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
 
 
-async def googleLogin(code: str,db: Session = Depends(get_db)):
-
+async def googleLogin(code: str):
+    db = SessionLocal()
     async with httpx.AsyncClient() as client:
 
         token_response = await client.post(
@@ -51,10 +57,24 @@ async def googleLogin(code: str,db: Session = Depends(get_db)):
             status_code=400,
             detail="Unable to fetch user information."
         )
-    
     user = user_response.json()
     print(user)
-
+    try:
+        query = text("""
+                    SELECT * FROM users 
+                    where email=:email
+                    """)
+        
+        results = db.execute(query, {
+            "email":user['email']
+        }).mappings().all()
+        if results:
+            User = loginUser(user, refresh_token, db)
+        else:
+            User = registerUser(user, refresh_token, db)
+    finally:
+        db.close()
+        
     return {
         "user": user,
         "google_tokens": {
@@ -63,3 +83,34 @@ async def googleLogin(code: str,db: Session = Depends(get_db)):
             "expires_in": expires_in
         }
     }
+
+def registerUser(user, refresh_token, db):
+    query = text("""
+    INSERT INTO users (google_id, name, email, profile_picture, refresh_token)
+    VALUES (:google_id, :name, :email, :profile_picture, :refresh_token)
+""")
+    results = db.execute(query, {
+        "google_id":user['id'],
+        "name": user['name'],
+        "email":user['email'],
+        "profile_picture":user['picture'], 
+        "refresh_token":refresh_token
+    })
+    db.commit()
+    return results
+
+
+def loginUser(user, refresh_token, db):
+    query = text("""
+    UPDATE users 
+    SET refresh_token = :refresh_token
+    WHERE email = :email 
+""")
+    
+    results = db.execute(query, {
+        "refresh_token":refresh_token,
+        "email":user['email']
+    })
+    db.commit()
+    return results
+
