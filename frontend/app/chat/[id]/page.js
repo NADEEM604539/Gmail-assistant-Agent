@@ -1,3 +1,4 @@
+import Sidebar from "../Sidebar";
 import Link from "next/link";
 import { ArrowLeft, Bot, Clock3, Download, Sparkles, UserCircle2, Layers, ShieldCheck } from "lucide-react";
 
@@ -31,7 +32,9 @@ export default function ThreadPage({ params }) {
 
   return (
     <main className="min-h-screen bg-[#0B1220] px-4 py-5 text-slate-100 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-[1600px] flex-col gap-6 xl:grid xl:grid-cols-[1fr_320px]">
+      <div className="mx-auto flex max-w-[1600px] flex-col gap-6 xl:grid xl:grid-cols-[300px_minmax(0,1fr)]">
+        <Sidebar activeId={id} />
+
         <section className="rounded-[32px] border border-white/10 bg-slate-950/95 shadow-[0_20px_60px_rgba(15,23,42,0.45)]">
           <div className="flex flex-col gap-4 border-b border-white/10 bg-slate-950/90 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-3">
