@@ -1,12 +1,11 @@
 import os
 from pathlib import Path
-
 import httpx
 from dotenv import load_dotenv
-from sqlalchemy.orm import Session
 from app.database.database import SessionLocal
 from fastapi import HTTPException
 from sqlalchemy import text
+from app.auth.jwt.service import create_access_token
 
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
@@ -58,59 +57,92 @@ async def googleLogin(code: str):
             detail="Unable to fetch user information."
         )
     user = user_response.json()
-    print(user)
+
     try:
         query = text("""
                     SELECT * FROM users 
                     where email=:email
                     """)
         
-        results = db.execute(query, {
-            "email":user['email']
-        }).mappings().all()
-        if results:
-            User = loginUser(user, refresh_token, db)
+        existing_user = db.execute(query, {
+            "email": user["email"]
+        }).mappings().first()
+
+        if existing_user:
+            response = loginUser(user, refresh_token, db)
         else:
-            User = registerUser(user, refresh_token, db)
+            response = registerUser(user, refresh_token, db)
+
     finally:
         db.close()
-        
-    return {
-        "user": user,
-        "google_tokens": {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "expires_in": expires_in
-        }
-    }
+    return response
 
 def registerUser(user, refresh_token, db):
-    query = text("""
+    insert_query = text("""
     INSERT INTO users (google_id, name, email, profile_picture, refresh_token)
     VALUES (:google_id, :name, :email, :profile_picture, :refresh_token)
 """)
-    results = db.execute(query, {
-        "google_id":user['id'],
-        "name": user['name'],
-        "email":user['email'],
-        "profile_picture":user['picture'], 
-        "refresh_token":refresh_token
+    db.execute(insert_query, {
+        "google_id": user["id"],
+        "name": user["name"],
+        "email": user["email"],
+        "profile_picture": user.get("picture"),
+        "refresh_token": refresh_token
     })
     db.commit()
-    return results
+
+    select_query = text("""
+    SELECT * FROM users
+    WHERE email = :email
+    """)
+    User=  db.execute(select_query, {"email": user["email"]}).mappings().first()
+    payload = {
+               "user_id":User.id,
+               "name":user['name'],
+               "email": user['email']
+           }
+    token = create_access_token(payload)
+    return {
+        "user":{
+            "user_id":User.id,
+            "name":user['name'],
+            "email": user['email']
+          },
+        "access_token":token
+       }
 
 
 def loginUser(user, refresh_token, db):
-    query = text("""
+    update_query = text("""
     UPDATE users 
     SET refresh_token = :refresh_token
     WHERE email = :email 
 """)
     
-    results = db.execute(query, {
-        "refresh_token":refresh_token,
-        "email":user['email']
+    db.execute(update_query, {
+        "refresh_token": refresh_token,
+        "email": user["email"]
     })
     db.commit()
-    return results
+    
+    select_query = text("""
+    SELECT * FROM users
+    WHERE email = :email
+    """)
+    results = db.execute(select_query, {"email": user["email"]}).mappings().first()
+    payload = {
+            "user_id":results.id,
+            "name":user['name'],
+            "email": user['email']
+        }
+    token = create_access_token(payload)
+    return {
+       "user":{
+            "user_id":results.id,
+            "name":user['name'],
+            "email": user['email']
+       },
+       "access_token":token
+    }
+
 
