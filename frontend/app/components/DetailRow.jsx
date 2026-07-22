@@ -1,17 +1,4 @@
-import {
-	ArrowRight,
-	Bot,
-	ChevronRight,
-	CircleCheck,
-	Clock3,
-	Inbox,
-	Mail,
-	MessageSquareText,
-	PenSquare,
-	Sparkles,
-	Star,
-	CircleUserRound,
-} from "lucide-react";
+
 
 export default function DetailRow({ label, value }) {
 	return (
