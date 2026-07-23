@@ -58,6 +58,7 @@ export default function HomePage() {
   }
 
   if (status === "authenticated") {
+    
     return <Home user={user} />;
   }
 
