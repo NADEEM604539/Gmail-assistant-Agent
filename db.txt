@@ -1,0 +1,14 @@
+drop database gmail_assistant;
+create database gmail_assistant;
+use gmail_assistant;
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    google_id VARCHAR(255) UNIQUE DEFAULT NULL,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    profile_picture TEXT DEFAULT NULL,
+    refresh_token TEXT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
+);

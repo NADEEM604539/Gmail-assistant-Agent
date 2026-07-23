@@ -39,6 +39,7 @@ export default function Sidebar() {
       const accessToken = window.localStorage.getItem('access_token');
 
       if (!accessToken) {
+        setUser(null);
         setCheckedAuth(true);
         return;
       }
@@ -54,6 +55,7 @@ export default function Sidebar() {
 
         if (!response.ok) {
           window.localStorage.removeItem('access_token');
+          setUser(null);
           setCheckedAuth(true);
           return;
         }
@@ -62,13 +64,16 @@ export default function Sidebar() {
         setUser(data);
       } catch (error) {
         window.localStorage.removeItem('access_token');
+        setUser(null);
       } finally {
         setCheckedAuth(true);
       }
     };
 
-    checkAuth();
-  }, []);
+    if (!user || !checkedAuth) {
+      checkAuth();
+    }
+  }, [pathname, checkedAuth, user]);
 
   if (!checkedAuth || !user) {
     return null;
