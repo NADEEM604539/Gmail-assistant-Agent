@@ -7,6 +7,8 @@ from bs4 import BeautifulSoup
 from email.utils import parseaddr
 from email.utils import getaddresses
 from email.utils import parsedate_to_datetime
+from app.gmail.Parser.cardEmailParser import Card_email_parser
+from app.gmail.Parser.shortEmailParser import Short_email_parser
 
 
 
@@ -134,12 +136,12 @@ class GmailService:
                 )
                 .execute()
             )
-            format_email = self.parse_email(email)
+            format_email = Short_email_parser(email)
             emails.append(format_email)
 
         return emails
 
-    def get_headers(self, payload):
+    def get_headers( payload):
         headers = {}
 
         for header in payload.get("headers", []):
@@ -147,7 +149,7 @@ class GmailService:
 
         return headers
 
-    def get_email_body(self, payload):
+    def get_email_body(payload):
         if "parts" in payload:
             # Prefer plain text
             for part in payload["parts"]:
@@ -172,193 +174,39 @@ class GmailService:
         return ""
 
 
-    def parse_email(self, email):
-    
-        headers = {
-            h["name"]: h["value"]
-            for h in email["payload"].get("headers", [])
-        }
 
-        labels = email.get("labelIds", [])
+    def fetch_emails_by_category(self, query: str, max_results: int = 5):
+        
+        response = (
+            self.service.users()
+            .messages()
+            .list(
+                userId="me",
+                q=query,
+                maxResults=max_results
+            )
+            .execute()
+        )
 
-        # --------------------------
-        # Sender
-        # --------------------------
+        messages = response.get("messages", [])
 
-        from_name, from_email = parseaddr(headers.get("From", ""))
+        emails = []
 
-        to_name, to_email = parseaddr(headers.get("To", ""))
+        for message in messages:
 
-        # --------------------------
-        # Folder
-        # --------------------------
-
-        folder = "inbox"
-
-        if "SENT" in labels:
-            folder = "sent"
-        elif "DRAFT" in labels:
-            folder = "draft"
-        elif "SPAM" in labels:
-            folder = "spam"
-        elif "TRASH" in labels:
-            folder = "trash"
-        elif "CATEGORY_PROMOTIONS" in labels:
-            folder = "promotion"
-        elif "CATEGORY_SOCIAL" in labels:
-            folder = "social"
-        elif "CATEGORY_UPDATES" in labels:
-            folder = "updates"
-
-        # --------------------------
-        # Status
-        # --------------------------
-
-        status = "read"
-
-        if "UNREAD" in labels:
-            status = "unread"
-
-        if "DRAFT" in labels:
-            status = "draft"
-
-        if "SENT" in labels:
-            status = "sent"
-
-        if "TRASH" in labels:
-            status = "deleted"
-
-        # --------------------------
-        # Category
-        # --------------------------
-
-        category = None
-
-        if "CATEGORY_PROMOTIONS" in labels:
-            category = "promotion"
-
-        elif "CATEGORY_SOCIAL" in labels:
-            category = "social"
-
-        elif "CATEGORY_UPDATES" in labels:
-            category = "updates"
-
-        elif "CATEGORY_FORUMS" in labels:
-            category = "forums"
-
-        elif "CATEGORY_PERSONAL" in labels:
-            category = "primary"
-
-        # --------------------------
-        # Attachments
-        # --------------------------
-
-        attachments = []
-
-        payload = email.get("payload", {})
-
-        parts = payload.get("parts", [])
-
-        for part in parts:
-
-            body = part.get("body", {})
-
-            if "attachmentId" not in body:
-                continue
-
-            attachments.append({
-                "content_id": part.get("headers", [{}])[0].get("value"),
-                "filename": part.get("filename"),
-                "mime_type": part.get("mimeType"),
-                "size_bytes": body.get("size"),
-                "download_url": body.get("attachmentId"),
-                "storage_url": None,
-                "checksum": None,
-                "is_inline": part.get("filename", "") == ""
-            })
-
-        # --------------------------
-        # Recipients
-        # --------------------------
-
-        recipients = []
-
-        for recipient_type, header in [
-            ("to", headers.get("To")),
-            ("cc", headers.get("Cc")),
-            ("bcc", headers.get("Bcc"))
-        ]:
-
-            if not header:
-                continue
-
-            for index, (name, address) in enumerate(getaddresses([header])):
-
-                recipients.append({
-                    "recipient_type": recipient_type,
-                    "name": name,
-                    "email": address,
-                    "recipient_order": index
-                })
-
-        # --------------------------
-        # Dates
-        # --------------------------
-
-        received_at = None
-
-        if headers.get("Date"):
-            try:
-                received_at = parsedate_to_datetime(
-                    headers["Date"]
+            gmail_message = (
+                self.service.users()
+                .messages()
+                .get(
+                    userId="me",
+                    id=message["id"],
+                    format="full"
                 )
-            except Exception:
-                pass
+                .execute()
+            )
 
-        return {
+            emails.append(
+                Card_email_parser(gmail_message)
+            )
 
-            "email": {
-
-                "gmail_message_id": email["id"],
-                "gmail_thread_id": email["threadId"],
-                "history_id": int(email.get("historyId", 0)),
-
-                "folder": folder,
-
-                "from_name": from_name,
-                "from_email": from_email,
-
-                "to_name": to_name,
-                "to_email": to_email,
-
-                "subject": headers.get("Subject", ""),
-
-                "body": self.get_email_body(email["payload"]),
-
-                "preview": email.get("snippet"),
-
-                "label": ",".join(labels),
-
-                "category": category,
-
-                "status": status,
-
-                "priority": "medium",
-
-                "has_attachment": len(attachments) > 0,
-
-                "starred": "STARRED" in labels,
-
-                "is_important": "IMPORTANT" in labels,
-
-                "ai_summary": None,
-
-                "received_at": received_at,
-
-                "sent_at": received_at
-            },
-
-            "recipients": recipients,
-
-            "attachments": attachments
-        }
+        return emails
