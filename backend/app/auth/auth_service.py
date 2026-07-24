@@ -140,7 +140,7 @@ def loginUser(user, refresh_token, db):
     update_query = text("""
     UPDATE gmail_accounts 
     SET refresh_token = :refresh_token
-    WHERE email = :email 
+    WHERE email_address = :email 
 """)
     
     db.execute(update_query, {
