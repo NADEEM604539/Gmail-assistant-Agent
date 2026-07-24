@@ -6,7 +6,8 @@ from app.database.database import SessionLocal
 from fastapi import HTTPException
 from sqlalchemy import text
 from app.auth.jwt.service import create_access_token
-
+from app.gmail.gmail_service import GmailService
+from app.gmail.gmail import registerEmailLoad
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
@@ -79,28 +80,51 @@ async def googleLogin(code: str):
 
 def registerUser(user, refresh_token, db):
     insert_query = text("""
-    INSERT INTO users (google_id, name, email, profile_picture, refresh_token)
-    VALUES (:google_id, :name, :email, :profile_picture, :refresh_token)
+    INSERT INTO users (google_id, name, email, profile_picture)
+    VALUES (:google_id, :name, :email, :profile_picture)
 """)
     db.execute(insert_query, {
         "google_id": user["id"],
         "name": user["name"],
         "email": user["email"],
-        "profile_picture": user.get("picture"),
-        "refresh_token": refresh_token
+        "profile_picture": user.get("picture")
     })
     db.commit()
-
     select_query = text("""
     SELECT * FROM users
     WHERE email = :email
     """)
     User=  db.execute(select_query, {"email": user["email"]}).mappings().first()
+    data = registerEmailLoad(user_id=User.id, token= refresh_token, db= db)
     payload = {
                "user_id":User.id,
                "name":user['name'],
                "email": user['email']
            }
+    insert_gmail_query = text("""
+    INSERT INTO gmail_accounts (
+        user_id,
+        email_address,
+        provider,
+        is_primary,
+        refresh_token
+    )
+    VALUES (
+        :user_id,
+        :email_address,
+        'google',
+        TRUE,
+        :refresh_token
+    )
+    """)
+
+    db.execute(insert_gmail_query, {
+        "user_id": User.id,
+        "email_address": user["email"],
+        "refresh_token": refresh_token
+    })
+
+    db.commit()
     token = create_access_token(payload)
     return {
         "user":{
@@ -114,7 +138,7 @@ def registerUser(user, refresh_token, db):
 
 def loginUser(user, refresh_token, db):
     update_query = text("""
-    UPDATE users 
+    UPDATE gmail_accounts 
     SET refresh_token = :refresh_token
     WHERE email = :email 
 """)
@@ -124,6 +148,7 @@ def loginUser(user, refresh_token, db):
         "email": user["email"]
     })
     db.commit()
+
     
     select_query = text("""
     SELECT * FROM users
