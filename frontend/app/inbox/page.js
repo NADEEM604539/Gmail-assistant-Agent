@@ -1,174 +1,527 @@
-"use client"
-import { useState } from 'react'
+"use client";
+
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
-  Star, Sparkles, Paperclip, RefreshCw, ChevronDown, Filter,
-  Tag, Archive, Trash2, MoreHorizontal, CheckSquare, Square,
-  AlertCircle, Clock, CheckCircle2,
-} from 'lucide-react'
+  Star,
+  Sparkles,
+  Paperclip,
+  RefreshCw,
+  ChevronDown,
+  Filter,
+  Archive,
+  Trash2,
+  MoreHorizontal,
+  CheckSquare,
+  Square,
+  Inbox as InboxIcon,
+  Send,
+  FileText,
+  Mail,
+  MailOpen,
+  AlertCircle,
+  Check,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
 
+const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
+// High-level filters. `match` decides whether an email passes the filter.
+const FILTERS = [
+  {
+    id: "all",
+    label: "All Mail",
+    icon: Mail,
+    match: () => true,
+  },
+  {
+    id: "unread",
+    label: "Unread",
+    icon: MailOpen,
+    match: (email) => !!email.unread,
+  },
+  {
+    id: "starred",
+    label: "Starred",
+    icon: Star,
+    match: (email) => !!email.starred,
+  },
+  {
+    id: "important",
+    label: "Important",
+    icon: AlertCircle,
+    match: (email) => !!email.important,
+  },
+  {
+    id: "attachments",
+    label: "Has attachments",
+    icon: Paperclip,
+    match: (email) => (email.attachments?.length || 0) > 0,
+  },
+  {
+    id: "inbox",
+    label: "Inbox",
+    icon: InboxIcon,
+    match: (email) => email.labels?.includes("INBOX"),
+  },
+  {
+    id: "sent",
+    label: "Sent",
+    icon: Send,
+    match: (email) => email.labels?.includes("SENT"),
+  },
+  {
+    id: "draft",
+    label: "Drafts",
+    icon: FileText,
+    match: (email) => email.labels?.includes("DRAFT"),
+  },
+];
 
-const EMAILS = [
-  { id: 1, from: 'Sarah Chen', email: 'sarah@stripe.com', subject: 'Q4 budget review — need your sign-off by EOD', preview: "Hi Jane, I've attached the full Q4 budget proposal for review. We need your CFO sign-off before tomorrow's board meeting.", time: '9:42 AM', unread: true, starred: true, priority: 'high', hasAttachment: true, label: 'Finance', aiSummary: 'Budget approval needed by 5pm', avatar: 'SC', category: 'Primary' },
-  { id: 2, from: 'GitHub Actions', email: 'noreply@github.com', subject: 'Deploy to production succeeded ✓ — main branch', preview: 'Your workflow run completed successfully. All 47 tests passed. Deployment to prod-us-east-1 is live.', time: '9:15 AM', unread: true, starred: false, priority: 'low', hasAttachment: false, label: 'Dev', aiSummary: 'Production deploy successful', avatar: 'GH', category: 'Updates' },
-  { id: 3, from: 'Marcus Webb', email: 'marcus@linear.app', subject: 'Re: Partnership proposal — your feedback is needed', preview: "Thanks for sending this over. I had a chance to review the proposal and have some thoughts on the go-to-market strategy that I'd like to discuss.", time: '8:50 AM', unread: false, starred: false, priority: 'medium', hasAttachment: false, label: 'Business', aiSummary: 'Partnership feedback needed', avatar: 'MW', category: 'Primary' },
-  { id: 4, from: 'Priya Nair', email: 'priya@notion.so', subject: 'Meeting rescheduled — Thursday 2pm works better', preview: "Quick heads up — I need to push tomorrow's product sync to Thursday at 2pm. Can everyone confirm availability?", time: 'Yesterday', unread: false, starred: true, priority: 'medium', hasAttachment: false, label: 'Meetings', aiSummary: 'Meeting moved to Thu 2pm', avatar: 'PN', category: 'Primary' },
-  { id: 5, from: 'Stripe Billing', email: 'billing@stripe.com', subject: 'Invoice #INV-2024-1127 — November statement ready', preview: 'Your monthly invoice for November 2024 is now available for download. Total: $2,450.00. Due: December 15, 2024.', time: 'Yesterday', unread: false, starred: false, priority: 'low', hasAttachment: true, label: 'Finance', aiSummary: 'Invoice $2,450 due Dec 15', avatar: 'SB', category: 'Updates' },
-  { id: 6, from: 'Tom Richards', email: 'tom@acme.io', subject: 'Urgent: Server downtime affecting 3 enterprise clients', preview: "We've had a critical incident since 2:30am. Three of our enterprise clients are impacted. I've escalated to engineering and need your approval to offer SLA credits.", time: 'Yesterday', unread: true, starred: false, priority: 'high', hasAttachment: false, label: 'Urgent', aiSummary: 'Critical incident — approval needed for SLA credits', avatar: 'TR', category: 'Primary' },
-  { id: 7, from: 'Newsletter: Product Hunt', email: 'noreply@producthunt.com', subject: "Today's top products — AI tools taking over", preview: "Check out today's featured launches: AI-powered code review, smart inbox assistant, and more productivity tools...", time: 'Nov 26', unread: false, starred: false, priority: 'low', hasAttachment: false, label: 'Newsletter', aiSummary: 'Product Hunt daily digest', avatar: 'PH', category: 'Promotions' },
-  { id: 8, from: 'Alex Thompson', email: 'alex@design.co', subject: 'Design review feedback for the new onboarding flow', preview: "Hi Jane, I've gone through the latest onboarding designs and have some UX suggestions. Overall it's looking great — just a few tweaks needed.", time: 'Nov 26', unread: false, starred: false, priority: 'medium', hasAttachment: true, label: 'Design', aiSummary: 'Onboarding design feedback attached', avatar: 'AT', category: 'Primary' },
-]
-
-const CATEGORIES = ['All', 'Primary', 'Promotions', 'Updates', 'Spam']
-const LABELS = ['All Labels', 'Finance', 'Dev', 'Business', 'Urgent', 'Design', 'Meetings']
-
-function priorityIcon(priority) {
-  if (priority === 'high') return <AlertCircle size={12} className="text-red-500" />
-  if (priority === 'medium') return <Clock size={12} className="text-amber-500" />
-  return <CheckCircle2 size={12} className="text-green-500" />
-}
+// Determine which "category" an email belongs to for routing purposes.
+// Priority: draft > sent > inbox (falls back to inbox if nothing matches).
+const getEmailCategory = (email) => {
+  const labels = email.labels || [];
+  if (labels.includes("DRAFT")) return "draft";
+  if (labels.includes("SENT")) return "sent";
+  if (labels.includes("INBOX")) return "inbox";
+  return "inbox";
+};
 
 export default function Inbox({ navigate }) {
-  const [selected, setSelected] = useState(new Set())
-  const [category, setCategory] = useState('All')
-  const [label, setLabel] = useState('All Labels')
-  const [showAI, setShowAI] = useState(true)
+  const router = useRouter();
 
-  const filtered = EMAILS.filter((e) => {
-    if (category !== 'All' && e.category !== category) return false
-    if (label !== 'All Labels' && e.label !== label) return false
-    return true
-  })
+  const [emails, setEmails] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [selected, setSelected] = useState(new Set());
+  const [showAI, setShowAI] = useState(true);
+
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef(null);
+
+  useEffect(() => {
+    initialize();
+  }, []);
+
+  // Close the filter dropdown when clicking outside of it
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) {
+        setFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const initialize = async () => {
+    setLoading(true);
+
+    const token = localStorage.getItem("access_token");
+
+    if (!token) {
+      router.replace("/");
+      return;
+    }
+
+    try {
+      // Verify authentication
+      const authResponse = await fetch(`${API}/api/auth/user`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!authResponse.ok) {
+        localStorage.removeItem("access_token");
+        router.replace("/");
+        return;
+      }
+
+      // Load inbox
+      await fetchEmails(token);
+    } catch (err) {
+      console.error(err);
+
+      localStorage.removeItem("access_token");
+      router.replace("/");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchEmails = async (
+    token = localStorage.getItem("access_token")
+  ) => {
+    try {
+      const response = await fetch(`${API}/api/gmail/inbox`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch emails");
+      }
+
+      const data = await response.json();
+      console.log(data);
+      setEmails(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const toggleSelect = (id) => {
-    const next = new Set(selected)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    setSelected(next)
+    const next = new Set(selected);
+
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+
+    setSelected(next);
+  };
+
+  const allSelected =
+    emails.length > 0 &&
+    emails.every((email) => selected.has(email.id));
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(emails.map((e) => e.id)));
+    }
+  };
+
+  // Handle a row click: figure out the email's category and route there
+  const handleEmailClick = (email) => {
+    const category = getEmailCategory(email);
+    navigate?.(`${category}/${email.id}`);
+  };
+
+  const activeFilterConfig = useMemo(
+    () => FILTERS.find((f) => f.id === activeFilter) || FILTERS[0],
+    [activeFilter]
+  );
+
+  const filtered = useMemo(
+    () => emails.filter((email) => activeFilterConfig.match(email)),
+    [emails, activeFilterConfig]
+  );
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#f6f8fc]">
+        <div className="flex flex-col items-center">
+          <div className="relative">
+            <RefreshCw
+              size={42}
+              className="animate-spin text-[#1a73e8]"
+            />
+
+            <div className="absolute inset-0 rounded-full border-4 border-[#e8f0fe]" />
+          </div>
+
+          <h2 className="mt-6 text-lg font-semibold text-[#202124]">
+            Loading your inbox
+          </h2>
+
+          <p className="mt-2 text-sm text-[#5f6368]">
+            Fetching your latest emails...
+          </p>
+        </div>
+      </div>
+    );
   }
-  const allSelected = filtered.length > 0 && filtered.every((e) => selected.has(e.id))
-  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(filtered.map((e) => e.id)))
 
   return (
-    <div className="flex flex-col h-full bg-white">
-      {/* Inbox toolbar */}
-      <div className="border-b border-[#e8eaed] px-4 py-3 flex items-center gap-3 flex-shrink-0">
-        <button onClick={toggleAll} className="p-1.5 hover:bg-[#f1f3f4] rounded text-[#5f6368]">
-          {allSelected ? <CheckSquare size={16} className="text-[#1a73e8]" /> : <Square size={16} />}
+    <div className="flex h-full flex-col bg-white">
+      {/* Toolbar */}
+      <div className="flex shrink-0 items-center gap-3 border-b border-[#e8eaed] bg-[#f8f9fa] px-5 py-3">
+        <button
+          onClick={toggleAll}
+          className="rounded-full p-2 hover:bg-[#e8eaed]"
+        >
+          {allSelected ? (
+            <CheckSquare
+              size={18}
+              className="text-[#1a73e8]"
+            />
+          ) : (
+            <Square
+              size={18}
+              className="text-[#5f6368]"
+            />
+          )}
         </button>
-        <button className="p-1.5 hover:bg-[#f1f3f4] rounded text-[#5f6368]" title="Refresh">
-          <RefreshCw size={15} />
+
+        <button
+          onClick={() => fetchEmails()}
+          className="rounded-full p-2 hover:bg-[#e8eaed]"
+        >
+          <RefreshCw
+            size={18}
+            className="text-[#5f6368]"
+          />
         </button>
-        <button className="p-1.5 hover:bg-[#f1f3f4] rounded text-[#5f6368] flex items-center gap-1 text-xs" title="More options">
-          <MoreHorizontal size={15} />
+
+        <button className="rounded-full p-2 hover:bg-[#e8eaed]">
+          <MoreHorizontal
+            size={18}
+            className="text-[#5f6368]"
+          />
         </button>
 
         {selected.size > 0 && (
-          <div className="flex items-center gap-1 ml-2 border-l border-[#e8eaed] pl-3">
-            <span className="text-xs text-[#5f6368] mr-1">{selected.size} selected</span>
-            <button className="p-1.5 hover:bg-[#f1f3f4] rounded text-[#5f6368]" title="Archive"><Archive size={15} /></button>
-            <button className="p-1.5 hover:bg-[#f1f3f4] rounded text-[#5f6368]" title="Delete"><Trash2 size={15} /></button>
-            <button className="p-1.5 hover:bg-[#f1f3f4] rounded text-[#5f6368]" title="Label"><Tag size={15} /></button>
+          <div className="ml-3 flex items-center gap-2 border-l border-[#dadce0] pl-4">
+            <span className="text-sm text-[#5f6368]">
+              {selected.size} selected
+            </span>
+
+            <button
+              title="Archive"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-[#5f6368] transition-all duration-150 hover:bg-[#fce8e6] hover:text-[#d93025]"
+            >
+              <Archive size={20} strokeWidth={2.2} />
+            </button>
+
+            <button
+              title="Delete"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-[#5f6368] transition-all duration-150 hover:bg-[#fce8e6] hover:text-[#d93025]"
+            >
+              <Trash2 size={20} strokeWidth={2.2} />
+            </button>
           </div>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-3">
           <button
             onClick={() => setShowAI(!showAI)}
-            className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-all ${showAI ? 'bg-violet-50 text-violet-600 border-violet-200' : 'border-[#e8eaed] text-[#5f6368]'}`}
+            className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${showAI
+              ? "border-[#d2e3fc] bg-[#e8f0fe] text-[#1a73e8]"
+              : "border-[#dadce0] bg-white text-[#5f6368]"
+              }`}
           >
-            <Sparkles size={12} /> AI Summaries
+            <Sparkles size={14} />
+            AI Summary
           </button>
-          <div className="flex items-center gap-1.5 text-xs text-[#5f6368] border border-[#e8eaed] rounded-full px-3 py-1.5">
-            <Filter size={12} />
-            <select value={label} onChange={e => setLabel(e.target.value)} className="bg-transparent outline-none cursor-pointer">
-              {LABELS.map(l => <option key={l}>{l}</option>)}
-            </select>
+
+          {/* Filter dropdown */}
+          <div className="relative" ref={filterRef}>
+            <button
+              onClick={() => setFilterOpen((v) => !v)}
+              className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${activeFilter !== "all"
+                ? "border-[#d2e3fc] bg-[#e8f0fe] text-[#1a73e8]"
+                : "border-[#dadce0] bg-white text-[#5f6368] hover:bg-[#f1f3f4]"
+                }`}
+            >
+              <Filter size={14} />
+              {activeFilterConfig.label}
+              <ChevronDown
+                size={14}
+                className={`transition-transform ${filterOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {filterOpen && (
+              <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-xl border border-[#dadce0] bg-white py-2 shadow-lg">
+                {FILTERS.map((f) => {
+                  const Icon = f.icon;
+                  const isActive = f.id === activeFilter;
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => {
+                        setActiveFilter(f.id);
+                        setFilterOpen(false);
+                      }}
+                      className={`flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors ${isActive
+                        ? "bg-[#e8f0fe] text-[#1a73e8]"
+                        : "text-[#3c4043] hover:bg-[#f1f3f4]"
+                        }`}
+                    >
+                      <Icon size={15} />
+                      <span className="flex-1">{f.label}</span>
+                      {isActive && <Check size={15} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Categories */}
-      <div className="border-b border-[#f1f3f4] flex overflow-x-auto">
-        {CATEGORIES.map(c => (
-          <button
-            key={c}
-            onClick={() => setCategory(c)}
-            className={`flex-shrink-0 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${category === c ? 'border-[#1a73e8] text-[#1a73e8]' : 'border-transparent text-[#5f6368] hover:text-[#202124] hover:bg-[#f8fafc]'}`}
-          >
-            {c}
-            {c === 'Primary' && <span className="ml-1.5 text-[10px] bg-[#1a73e8] text-white px-1.5 py-0.5 rounded-full font-semibold">8</span>}
-          </button>
-        ))}
-      </div>
-
-      {/* Email list */}
-      <div className="flex-1 overflow-y-auto divide-y divide-[#f8fafc]">
+      {/* Email List */}
+      <div className="flex-1 overflow-y-auto divide-y divide-[#e8eaed]">
         {filtered.map((email) => (
           <div
             key={email.id}
-            className={`group flex items-start gap-3 px-4 py-3.5 hover:bg-[#f8fafc] cursor-pointer transition-colors ${email.unread ? 'bg-blue-50/20' : ''} ${selected.has(email.id) ? 'bg-blue-50' : ''}`}
-            onClick={() => navigate('email-detail')}
+            onClick={() => handleEmailClick(email)}
+            className={`group flex cursor-pointer items-start gap-4 px-5 py-4 transition-colors hover:bg-[#f5f5f5] ${email.unread
+              ? "bg-[#f8fbff]"
+              : "bg-white"
+              }`}
           >
-            {/* Checkbox + star */}
-            <div className="flex items-center gap-1 mt-0.5 flex-shrink-0">
+            {/* Checkbox */}
+            <div className="mt-1 flex items-center gap-2">
               <button
-                onClick={(e) => { e.stopPropagation(); toggleSelect(email.id) }}
-                className={`p-0.5 transition-opacity ${selected.has(email.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleSelect(email.id);
+                }}
+                className={`transition-opacity ${selected.has(email.id)
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100"
+                  }`}
               >
-                {selected.has(email.id)
-                  ? <CheckSquare size={16} className="text-[#1a73e8]" />
-                  : <Square size={16} className="text-[#9aa0a6]" />
-                }
+                {selected.has(email.id) ? (
+                  <CheckSquare
+                    size={18}
+                    className="text-[#1a73e8]"
+                  />
+                ) : (
+                  <Square
+                    size={18}
+                    className="text-[#9aa0a6]"
+                  />
+                )}
               </button>
-              <button onClick={(e) => e.stopPropagation()} className="p-0.5">
-                <Star size={15} className={email.starred ? 'text-amber-400 fill-amber-400' : 'text-[#dadce0] group-hover:text-[#9aa0a6]'} />
+
+              <button
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Star
+                  size={17}
+                  className={
+                    email.starred
+                      ? "fill-[#fbbc04] text-[#fbbc04]"
+                      : "text-[#dadce0]"
+                  }
+                />
               </button>
             </div>
 
             {/* Avatar */}
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-violet-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-              {email.avatar}
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1a73e8] text-sm font-semibold text-white" >
+              {(email.from?.name ||
+                email.from?.email ||
+                "?")
+                .substring(0, 2)
+                .toUpperCase()}
             </div>
 
             {/* Content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className={`text-sm truncate ${email.unread ? 'font-bold text-[#202124]' : 'font-medium text-[#5f6368]'}`}>{email.from}</span>
-                {priorityIcon(email.priority)}
-                <span className="text-xs text-[#9aa0a6] font-normal bg-[#f1f3f4] px-1.5 py-0.5 rounded hidden sm:block">{email.label}</span>
+            <div className="min-w-0 flex-1 overflow-hidden" onClick={()=>router.push(`${getEmailCategory(email)}/${email.id}`)}>
+              <div className="flex flex-wrap items-center gap-2" >
+                <span
+                  className={`text-[14px] leading-5 break-words ${email.unread
+                    ? "font-semibold text-[#202124]"
+                    : "font-medium text-[#202124]"
+                    }`}
+                >
+                  {email.from?.name ||
+                    email.from?.email}
+                </span>
+
+                <span className="rounded-full bg-[#f1f3f4] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#5f6368]">
+                  {getEmailCategory(email)}
+                </span>
               </div>
-              <div className={`text-sm truncate mb-0.5 ${email.unread ? 'font-semibold text-[#202124]' : 'text-[#5f6368]'}`}>{email.subject}</div>
-              <div className="flex items-center gap-2 text-xs text-[#9aa0a6]">
-                <span className="truncate">{email.preview}</span>
+
+              <div
+                className={`mt-1 text-[14px] leading-5 break-words ${email.unread
+                  ? "font-semibold text-[#202124]"
+                  : "font-medium text-[#202124]"
+                  }`}
+              >
+                {email.subject || "(no subject)"}
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                <span className="leading-5 break-words text-[#5f6368]">
+                  {email.snippet}
+                </span>
+
                 {showAI && (
-                  <span className="flex-shrink-0 flex items-center gap-1 bg-violet-50 text-violet-600 border border-violet-200 px-1.5 py-0.5 rounded text-[10px] font-medium">
-                    <Sparkles size={8} /> {email.aiSummary}
+                  <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#e8f0fe] px-2 py-1 text-[11px] font-medium text-[#1a73e8]">
+                    <Sparkles size={10} />
+                    AI Summary
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Meta */}
-            <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-              <span className={`text-xs ${email.unread ? 'text-[#1a73e8] font-semibold' : 'text-[#9aa0a6]'}`}>{email.time}</span>
-              <div className="flex gap-1">
-                {email.hasAttachment && <Paperclip size={12} className="text-[#9aa0a6]" />}
-                {email.unread && <div className="w-2 h-2 bg-[#1a73e8] rounded-full" />}
+            {/* Right */}
+            <div className="ml-4 flex shrink-0 flex-col items-end gap-2">
+              <span
+                className={`text-xs ${email.unread
+                  ? "font-semibold text-[#202124]"
+                  : "text-[#5f6368]"
+                  }`}
+              >
+                {new Date(
+                  email.date
+                ).toLocaleDateString()}
+              </span>
+
+              <div className="flex items-center gap-2">
+                {email.attachments?.length > 0 && (
+                  <Paperclip
+                    size={14}
+                    className="text-[#5f6368]"
+                  />
+                )}
+
+                {email.unread && (
+                  <div className="h-2.5 w-2.5 rounded-full bg-[#1a73e8]" />
+                )}
               </div>
             </div>
           </div>
         ))}
+
+        {!loading && filtered.length === 0 && (
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-[#5f6368]">
+            <span>No emails match this filter.</span>
+            {activeFilter !== "all" && (
+              <button
+                onClick={() => setActiveFilter("all")}
+                className="text-sm font-medium text-[#1a73e8] hover:underline"
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Pagination */}
-      <div className="border-t border-[#e8eaed] px-4 py-2.5 flex items-center justify-between text-xs text-[#5f6368] flex-shrink-0">
-        <span>1–{filtered.length} of {EMAILS.length}</span>
-        <div className="flex items-center gap-2">
-          <button className="p-1.5 rounded hover:bg-[#f1f3f4] transition-colors"><ChevronDown size={14} className="rotate-90" /></button>
-          <button className="p-1.5 rounded hover:bg-[#f1f3f4] transition-colors"><ChevronDown size={14} className="-rotate-90" /></button>
+      {/* Footer */}
+      <div className="flex h-12 shrink-0 items-center justify-between border-t border-[#e8eaed] bg-[#f8f9fa] px-5 text-sm text-[#5f6368]">
+        <span>
+          {filtered.length === 0
+            ? 0
+            : 1}
+          –{filtered.length} of {emails.length}
+        </span>
+
+        <div className="flex gap-2">
+          <button className="rounded-full p-2 hover:bg-[#e8eaed]">
+            <ChevronDown
+              size={16}
+              className="rotate-90"
+            />
+          </button>
+
+          <button className="rounded-full p-2 hover:bg-[#e8eaed]">
+            <ChevronDown
+              size={16}
+              className="-rotate-90"
+            />
+          </button>
         </div>
       </div>
     </div>
-  )
+  );
 }
