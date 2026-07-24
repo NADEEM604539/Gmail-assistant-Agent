@@ -5,115 +5,139 @@ import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function MessagesCard({ section }) {
-	const router = useRouter();
+    const router = useRouter();
 
-	return (
-		<div className="group overflow-hidden rounded-3xl border border-[#E8EAED] bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-			{/* Accent */}
-			<div
-				className="h-1.5 w-full"
-				style={{ backgroundColor: section.accent }}
-			/>
+    return (
+        <div className="group overflow-hidden rounded-3xl border border-[#E8EAED] bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+            {/* Accent */}
+            <div
+                className="h-1.5 w-full"
+                style={{ backgroundColor: section.accent }}
+            />
 
-			<div className="p-5">
+            <div className="p-5">
+                {/* Header */}
+                <div
+                    onClick={() => router.push(`/${section.key}`)}
+                    className="flex cursor-pointer items-center justify-between"
+                >
+                    <div className="flex items-center gap-3">
+                        <div
+                            className="flex h-10 w-10 items-center justify-center rounded-2xl"
+                            style={{
+                                backgroundColor: `${section.accent}15`,
+                                color: section.accent,
+                            }}
+                        >
+                            {section.icon}
+                        </div>
 
-				{/* Header */}
-				<div
-					onClick={() => router.push(`/${section.key}`)}
-					className="flex cursor-pointer items-center justify-between"
-				>
-					<div className="flex items-center gap-3">
+                        <div>
+                            <h2 className="text-[16px] font-semibold text-[#202124]">
+                                {section.title}
+                            </h2>
 
-						<div
-							className="flex h-10 w-10 items-center justify-center rounded-2xl"
-							style={{
-								backgroundColor: `${section.accent}15`,
-								color: section.accent,
-							}}
-						>
-							{section.icon}
-						</div>
+                            <p className="text-xs text-[#5F6368]">
+                                Last 5 emails
+                            </p>
+                        </div>
+                    </div>
 
-						<div>
-							<h2 className="text-[16px] font-semibold text-[#202124]">
-								{section.title}
-							</h2>
+                    <div className="rounded-full p-2 transition hover:bg-[#F3F7FF]">
+                        <ChevronRight
+                            size={18}
+                            className="text-[#9AA0A6]"
+                        />
+                    </div>
+                </div>
 
-							<p className="text-xs text-[#5F6368]">
-								Last 5 emails
-							</p>
-						</div>
+                {/* Messages */}
+                <div className="mt-4 space-y-2">
+                    {section.items?.length > 0 ? (
+                        section.items.map((item) => {
+                            const unread = item.status === "unread";
 
-					</div>
+                            return (
+                                <div
+                                    key={item.email_id}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        router.push(
+                                            `/${section.key}/${item.email_id}`
+                                        );
+                                    }}
+                                    className="flex cursor-pointer items-center justify-between rounded-xl bg-[#FAFBFF] px-3 py-2.5 transition-all duration-300 hover:bg-white hover:shadow-sm"
+                                >
+                                    <div className="flex min-w-0 items-center gap-3">
+                                        <Image
+                                            src={item.avatar}
+                                            alt={item.sender}
+                                            width={38}
+                                            height={38}
+                                            className="rounded-full border border-[#E8EAED] object-cover"
+                                        />
 
-					<div className="rounded-full p-2 transition hover:bg-[#F3F7FF]">
-						<ChevronRight
-							size={18}
-							className="text-[#9AA0A6]"
-						/>
-					</div>
-				</div>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <p
+                                                    className={`truncate text-sm text-[#202124] ${
+                                                        unread
+                                                            ? "font-bold"
+                                                            : "font-semibold"
+                                                    }`}
+                                                >
+                                                    {item.sender}
+                                                </p>
 
-				{/* Messages */}
+                                                {item.email && (
+                                                    <>
+                                                        <span className="text-[#BDC1C6]">
+                                                            •
+                                                        </span>
 
-				<div className="mt-4 space-y-2">
+                                                        <p className="truncate text-[11px] text-[#80868B]">
+                                                            {item.email}
+                                                        </p>
+                                                    </>
+                                                )}
+                                            </div>
 
-					{section.items.map((item) => (
-						<div
-							key={`${section.key}-${item.subject}`}
-							className="flex cursor-pointer items-center justify-between rounded-xl bg-[#FAFBFF] px-3 py-2.5 transition-all duration-300 hover:bg-white hover:shadow-sm"
-						>
+                                            <p
+                                                className={`truncate text-[13px] ${
+                                                    unread
+                                                        ? "font-bold text-[#202124]"
+                                                        : "font-normal text-[#5F6368]"
+                                                }`}
+                                            >
+                                                {item.subject}
+                                            </p>
+                                        </div>
+                                    </div>
 
-							<div className="flex min-w-0 items-center gap-3">
-
-								<Image
-									src={item.avatar}
-									alt={item.sender}
-									width={38}
-									height={38}
-									className="rounded-full border border-[#E8EAED] object-cover"
-								/>
-
-								<div className="min-w-0">
-
-									<div className="flex items-center gap-2">
-
-										<p className="truncate text-sm font-semibold text-[#202124]">
-											{item.sender}
-										</p>
-
-										{item.email && (
-											<>
-												<span className="text-[#BDC1C6]">
-													•
-												</span>
-
-												<p className="truncate text-[11px] text-[#80868B]">
-													{item.email}
-												</p>
-											</>
-										)}
-
-									</div>
-
-									<p className="truncate text-[13px] text-[#5F6368]">
-										{item.subject}
-									</p>
-
-								</div>
-
-							</div>
-
-							<p className="ml-3 whitespace-nowrap text-[11px] font-medium text-[#9AA0A6]">
-								{item.time}
-							</p>
-
-						</div>
-					))}
-
-				</div>
-
-			</div>
-		</div>
-	);
+                                    <p
+                                        className={`ml-3 whitespace-nowrap text-[11px] ${
+                                            unread
+                                                ? "font-bold text-[#202124]"
+                                                : "font-medium text-[#9AA0A6]"
+                                        }`}
+                                    >
+                                        {item.time}
+                                    </p>
+                                </div>
+                            );
+                        })
+                    ) : (
+                        <div className="flex h-36 flex-col items-center justify-center rounded-2xl border border-dashed border-[#E8EAED] bg-[#FAFBFF]">
+                            <p className="text-sm font-medium text-[#5F6368]">
+                                No emails found
+                            </p>
+                            <p className="mt-1 text-xs text-[#9AA0A6]">
+                                This category doesn't contain any emails yet.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 }

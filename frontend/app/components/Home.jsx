@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { useState, useEffect } from "react";
+import Analytics from "../analytics/page";
 import {
     ArrowRight,
     Bot,
@@ -12,6 +14,7 @@ import {
     MessageSquareText,
     PenSquare,
     Sparkles,
+    Database,
     Star,
     CircleUserRound,
     Search,
@@ -73,171 +76,94 @@ export const preferences = [
         color: "#EA4335",
     },
 ];
-
-
-const sections = [
-    {
-        key: "drafts",
-        title: "Last drafts",
-        accent: "#F59E0B",
-        icon: <PenSquare size={18} />,
-        items: [
-            {
-                sender: "You",
-                avatar: "https://ui-avatars.com/api/?name=You&background=F59E0B&color=fff",
-                subject: "Draft: Project update for client",
-                time: "10:12 AM",
-            },
-            {
-                sender: "You",
-                avatar: "https://ui-avatars.com/api/?name=You&background=F59E0B&color=fff",
-                subject: "Reply to HR about interview schedule",
-                time: "Yesterday",
-            },
-            {
-                sender: "You",
-                avatar: "https://ui-avatars.com/api/?name=You&background=F59E0B&color=fff",
-                subject: "Draft: meeting summary for team",
-                time: "Yesterday",
-            },
-            {
-                sender: "You",
-                avatar: "https://ui-avatars.com/api/?name=You&background=F59E0B&color=fff",
-                subject: "Follow-up on invoice clarification",
-                time: "2 days ago",
-            },
-            {
-                sender: "You",
-                avatar: "https://ui-avatars.com/api/?name=You&background=F59E0B&color=fff",
-                subject: "Draft: onboarding email to new member",
-                time: "2 days ago",
-            },
-        ],
-    },
-    {
-        key: "received",
-        title: "Last received",
-        accent: "#4285F4",
-        icon: <Inbox size={18} />,
-        items: [
-            {
-                sender: "Google",
-                avatar: "https://logo.clearbit.com/google.com",
-                subject: "Security alert for your account",
-                time: "10:30 AM",
-            },
-            {
-                sender: "Figma",
-                avatar: "https://logo.clearbit.com/figma.com",
-                subject: "Your team has been updated",
-                time: "9:15 AM",
-            },
-            {
-                sender: "Notion",
-                avatar: "https://logo.clearbit.com/notion.so",
-                subject: "Updates to our terms of service",
-                time: "8:45 AM",
-            },
-            {
-                sender: "LinkedIn",
-                avatar: "https://logo.clearbit.com/linkedin.com",
-                subject: "You have 5 new connections",
-                time: "Yesterday",
-            },
-            {
-                sender: "GitHub",
-                avatar: "https://logo.clearbit.com/github.com",
-                subject: "1 new commit in mailgent-ai",
-                time: "Yesterday",
-            },
-        ],
-    },
-    {
-        key: "sent",
-        title: "Last sent",
-        accent: "#7C3AED",
-        icon: <Mail size={18} />,
-        items: [
-            {
-                sender: "Adeel",
-                email: "adeel@example.com",
-                avatar: "https://ui-avatars.com/api/?name=Adeel&background=7C3AED&color=fff",
-                subject: "Project Update - Mailgent AI",
-                time: "11:20 AM",
-            },
-            {
-                sender: "Team",
-                email: "team@example.com",
-                avatar: "https://ui-avatars.com/api/?name=Team&background=7C3AED&color=fff",
-                subject: "Meeting Notes",
-                time: "Yesterday",
-            },
-            {
-                sender: "Client",
-                email: "client@example.com",
-                avatar: "https://ui-avatars.com/api/?name=Client&background=7C3AED&color=fff",
-                subject: "Proposal for Collaboration",
-                time: "Yesterday",
-            },
-            {
-                sender: "HR",
-                email: "hr@example.com",
-                avatar: "https://ui-avatars.com/api/?name=HR&background=7C3AED&color=fff",
-                subject: "Leave Application",
-                time: "2 days ago",
-            },
-            {
-                sender: "Info",
-                email: "info@example.com",
-                avatar: "https://ui-avatars.com/api/?name=Info&background=7C3AED&color=fff",
-                subject: "Query Regarding Subscription",
-                time: "2 days ago",
-            },
-        ],
-    },
-    {
-        key: "important",
-        title: "Important mails",
-        accent: "#EA4335",
-        icon: <Star size={18} />,
-        items: [
-            {
-                sender: "Google Workspace",
-                avatar: "https://logo.clearbit.com/google.com",
-                subject: "Your invoice is ready",
-                time: "10:00 AM",
-            },
-            {
-                sender: "Microsoft",
-                avatar: "https://logo.clearbit.com/microsoft.com",
-                subject: "Important: Security Update",
-                time: "Yesterday",
-            },
-            {
-                sender: "Stripe",
-                avatar: "https://logo.clearbit.com/stripe.com",
-                subject: "Payment of $149 received",
-                time: "2 days ago",
-            },
-            {
-                sender: "AWS Notifications",
-                avatar: "https://logo.clearbit.com/aws.amazon.com",
-                subject: "Your AWS service is scheduled for maintenance",
-                time: "2 days ago",
-            },
-            {
-                sender: "Cloudflare",
-                avatar: "https://logo.clearbit.com/cloudflare.com",
-                subject: "Action required for domain renewal",
-                time: "3 days ago",
-            },
-        ],
-    },
-];
+const iconMap = {
+    database: Database,
+    mail: Mail,
+    send: Send,
+};
 
 export default function Home({ user }) {
     const userName = user?.name || "there";
     const userEmail = user?.email || "demo@gmail.com"
+    const [sections, setSections] = useState([]);
+    const [stats, setStats] = useState([]);
+    const [loadingSections, setLoadingSections] = useState(true);
+
+    useEffect(() => {
+        const fetchDashboardStats = async () => {
+            try {
+                const token = localStorage.getItem("access_token");
+
+                if (!token) {
+                    throw new Error("No access token found");
+                }
+
+                const res = await fetch(
+                    `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/stats/dashboard/gmail`,
+                    {
+                        method: "GET",
+                        headers: {
+                            "Authorization": `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                        },
+                    }
+                );
+
+                if (!res.ok) {
+                    throw new Error("Failed to fetch dashboard stats");
+                }
+
+                const data = await res.json();
+
+                console.log(data);
+
+                setStats(data.stats);
+
+            } catch (error) {
+                console.error(error);
+            }
+        };
+
+        fetchDashboardStats();
+    }, []);
+
+
+
+    useEffect(() => {
+        const fetchSections = async () => {
+            try {
+                const token = localStorage.getItem("access_token");
+
+                const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/gmail/card`,
+                    {
+                        method: "GET",
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                        },
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error("Failed to fetch sections");
+                }
+
+                const data = await response.json();
+                console.log(data)
+
+                // backend returns { sections: [...] }
+                setSections(data || []);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoadingSections(false);
+            }
+        };
+
+        fetchSections();
+    }, []);
+
 
     return (
         <main className="min-h-screen bg-[#F6F8FC] px-4 py-4 text-[#202124] sm:px-6 sm:py-6 lg:px-8 lg:py-8">
@@ -398,31 +324,40 @@ export default function Home({ user }) {
 
                 <div className="mt-6 flex flex-wrap items-center gap-3">
 
-                    <div className="flex items-center gap-2 rounded-full border border-[#E8EAED] bg-white px-4 py-2 shadow-sm">
-                        <Mail size={16} className="text-[#4285F4]" />
-                        <span className="font-semibold text-[#202124]">1,248</span>
-                        <span className="text-sm text-[#5F6368]">Inbox</span>
-                    </div>
+                    {stats.map((stat) => {
 
-                    <div className="flex items-center gap-2 rounded-full border border-[#E8EAED] bg-white px-4 py-2 shadow-sm">
-                        <Star size={16} className="text-[#EA4335]" />
-                        <span className="font-semibold text-[#202124]">34</span>
-                        <span className="text-sm text-[#5F6368]">Important</span>
-                    </div>
+                        const Icon = iconMap[stat.icon];
 
-                    <div className="flex items-center gap-2 rounded-full border border-[#E8EAED] bg-white px-4 py-2 shadow-sm">
-                        <PenSquare size={16} className="text-[#FBBC05]" />
-                        <span className="font-semibold text-[#202124]">5</span>
-                        <span className="text-sm text-[#5F6368]">Drafts</span>
-                    </div>
+                        return (
+                            <div
+                                key={stat.id}
+                                className="flex items-center gap-2 rounded-full border border-[#E8EAED] bg-white px-4 py-2 shadow-sm transition hover:shadow-md"
+                            >
 
-                    <div className="flex items-center gap-2 rounded-full border border-[#E8EAED] bg-white px-4 py-2 shadow-sm">
-                        <Send size={16} className="text-[#34A853]" />
-                        <span className="font-semibold text-[#202124]">18</span>
-                        <span className="text-sm text-[#5F6368]">Sent Today</span>
-                    </div>
+                                {Icon && (
+                                    <Icon
+                                        size={16}
+                                        style={{
+                                            color: stat.color
+                                        }}
+                                    />
+                                )}
+
+                                <span className="font-semibold text-[#202124]">
+                                    {stat.value}
+                                </span>
+
+                                <span className="text-sm text-[#5F6368]">
+                                    {stat.title}
+                                </span>
+
+                            </div>
+                        );
+                    })}
 
                 </div>
+
+
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     {sections.map((section) => (
@@ -430,135 +365,7 @@ export default function Home({ user }) {
                     ))}
                 </div>
 
-
-                <div className="mb-8 overflow-hidden rounded-[30px] border border-[#E8EAED] bg-gradient-to-br from-[#FFFFFF] via-[#F8FAFF] to-[#EEF4FF] shadow-sm">
-
-                    {/* Top Gradient */}
-                    <div className="h-1.5 bg-gradient-to-r from-[#4285F4] via-[#34A853] to-[#FBBC05]" />
-
-                    <div className="flex flex-col gap-8 p-7 lg:flex-row lg:items-center lg:justify-between">
-
-                        {/* Left */}
-
-                        <div className="max-w-3xl">
-
-                            <div className="inline-flex items-center gap-2 rounded-full border border-[#D2E3FC] bg-white px-4 py-2 shadow-sm">
-
-                                <Bot
-                                    size={16}
-                                    className="text-[#4285F4]"
-                                />
-
-                                <span className="text-sm font-semibold text-[#1A73E8]">
-                                    AI Preferences
-                                </span>
-
-                            </div>
-
-                            <h2 className="mt-5 text-4xl font-bold tracking-tight text-[#202124]">
-                                Train your AI once.
-                                <span className="block text-[#4285F4]">
-                                    It remembers forever.
-                                </span>
-                            </h2>
-
-                            <p className="mt-4 max-w-2xl text-[15px] leading-8 text-[#5F6368]">
-                                Define how your AI should write emails, respond to clients,
-                                summarize conversations, and organize your inbox.
-                                Every preference is automatically applied whenever
-                                your assistant drafts, replies or processes emails.
-                            </p>
-
-                            <div className="mt-6 flex flex-wrap gap-3">
-
-                                <div className="flex items-center gap-2 rounded-full bg-white px-4 py-2 shadow-sm">
-                                    <CircleCheck
-                                        size={16}
-                                        className="text-[#34A853]"
-                                    />
-                                    <span className="text-sm font-medium">
-                                        Applied automatically
-                                    </span>
-                                </div>
-
-                                <div className="flex items-center gap-2 rounded-full bg-white px-4 py-2 shadow-sm">
-                                    <Sparkles
-                                        size={16}
-                                        className="text-[#FBBC05]"
-                                    />
-                                    <span className="text-sm font-medium">
-                                        Used by every AI reply
-                                    </span>
-                                </div>
-
-                            </div>
-
-                        </div>
-
-                        {/* Right */}
-
-                        <div className="flex w-full max-w-sm flex-col gap-4">
-
-                            <div className="rounded-3xl border border-[#E8EAED] bg-white p-5 shadow-sm">
-
-                                <div className="flex items-end justify-between">
-
-                                    <div>
-
-                                        <p className="text-sm text-[#5F6368]">
-                                            Active Preferences
-                                        </p>
-
-                                        <h3 className="mt-1 text-4xl font-bold text-[#202124]">
-                                        6
-                                        </h3>
-
-                                    </div>
-
-                                    <div className="rounded-2xl bg-[#E8F0FE] p-3">
-
-                                        <Bot
-                                            size={28}
-                                            className="text-[#4285F4]"
-                                        />
-
-                                    </div>
-
-                                </div>
-
-                                <div className="mt-5 h-2 overflow-hidden rounded-full bg-[#EEF2F6]">
-                                    <div className="h-full w-full rounded-full bg-gradient-to-r from-[#4285F4] to-[#34A853]" />
-                                </div>
-
-                                <p className="mt-3 text-sm text-[#5F6368]">
-                                    Your AI is fully personalized.
-                                </p>
-
-                            </div>
-
-                            <Link
-                                href="/preferences"
-                                className="flex items-center justify-center gap-2 rounded-2xl bg-[#4285F4] px-5 py-4 font-semibold text-white transition hover:bg-[#1A73E8]"
-                            >
-                                <Plus size={18} />
-                                See All Prerences
-                            </Link>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {preferences.map((preference) => (
-                        <PreferenceCard
-                            key={preference.id}
-                            preference={preference}
-                        />
-                    ))}
-                </div>
-
+                <Analytics />
 
             </section>
         </main>
