@@ -2,7 +2,10 @@ from dotenv import load_dotenv
 import os
 from app.gmail.gmail_service import GmailService
 from sqlalchemy import text
-
+from app.database.database import SessionLocal
+from datetime import datetime
+import json
+from app.gmail.Parser.fullEmailParser import parse_email_full
 
 
 load_dotenv()
@@ -10,6 +13,7 @@ load_dotenv()
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
+
 
 
 def registerEmailLoad(user_id: int, token: str, db):
@@ -24,13 +28,11 @@ def registerEmailLoad(user_id: int, token: str, db):
 
     try:
 
-        for message in messages:
+        for email in messages:
 
-            email = message["email"]
-
-            # ---------------------------------
+            # -------------------------------
             # Insert Email
-            # ---------------------------------
+            # -------------------------------
 
             result = db.execute(
                 text("""
@@ -40,24 +42,24 @@ def registerEmailLoad(user_id: int, token: str, db):
                         gmail_message_id,
                         gmail_thread_id,
                         history_id,
-                        folder,
-                        from_name,
-                        from_email,
-                        to_name,
-                        to_email,
+
                         subject,
                         body,
-                        preview,
-                        label,
-                        category,
-                        status,
-                        priority,
-                        has_attachment,
+                        snippet,
+
+                        sender_name,
+                        sender_email,
+
+                        recipients,
+                        labels,
+
+                        unread,
                         starred,
-                        is_important,
-                        ai_summary,
-                        received_at,
-                        sent_at
+                        important,
+
+                        email_date,
+
+                        has_attachments
                     )
                     VALUES
                     (
@@ -65,96 +67,77 @@ def registerEmailLoad(user_id: int, token: str, db):
                         :gmail_message_id,
                         :gmail_thread_id,
                         :history_id,
-                        :folder,
-                        :from_name,
-                        :from_email,
-                        :to_name,
-                        :to_email,
+
                         :subject,
                         :body,
-                        :preview,
-                        :label,
-                        :category,
-                        :status,
-                        :priority,
-                        :has_attachment,
+                        :snippet,
+
+                        :sender_name,
+                        :sender_email,
+
+                        :recipients,
+                        :labels,
+
+                        :unread,
                         :starred,
-                        :is_important,
-                        :ai_summary,
-                        :received_at,
-                        :sent_at
+                        :important,
+
+                        :email_date,
+
+                        :has_attachments
                     )
                 """),
                 {
-                    "user_id": user_id,
-                    **email
+                    "user_id":user_id,
+                    "gmail_message_id": email["id"],
+                    "gmail_thread_id": email["thread_id"],
+                    "history_id": email["history_id"],
+
+                    "subject": email["subject"],
+                    "body": email["body"],
+                    "snippet": email["snippet"],
+
+                    "sender_name": email["from"]["name"],
+                    "sender_email": email["from"]["email"],
+
+                    "recipients": json.dumps(email["to"]),
+                    "labels": json.dumps(email["labels"]),
+
+                    "unread": email["unread"],
+                    "starred": email["starred"],
+                    "important": email["important"],
+
+                    "email_date": email["date"],
+
+                    "has_attachments": len(email["attachments"]) > 0,
                 }
             )
 
             email_id = result.lastrowid
 
-            # ---------------------------------
-            # Recipients
-            # ---------------------------------
+            # -------------------------------
+            # Insert Attachments
+            # -------------------------------
 
-            for recipient in message["recipients"]:
-
-                db.execute(
-                    text("""
-                        INSERT INTO email_recipients
-                        (
-                            email_id,
-                            recipient_type,
-                            name,
-                            email,
-                            recipient_order
-                        )
-                        VALUES
-                        (
-                            :email_id,
-                            :recipient_type,
-                            :name,
-                            :email,
-                            :recipient_order
-                        )
-                    """),
-                    {
-                        "email_id": email_id,
-                        **recipient
-                    }
-                )
-
-            # ---------------------------------
-            # Attachments
-            # ---------------------------------
-
-            for attachment in message["attachments"]:
+            for attachment in email["attachments"]:
 
                 db.execute(
                     text("""
                         INSERT INTO email_attachments
                         (
                             email_id,
-                            content_id,
-                            filename,                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+                            filename,
                             mime_type,
-                            size_bytes,
-                            storage_url,
-                            download_url,
-                            checksum,
-                            is_inline
+                            attachment_id,
+                            size
                         )
                         VALUES
                         (
                             :email_id,
-                            :content_id,
                             :filename,
                             :mime_type,
-                            :size_bytes,
-                            :storage_url,
-                            :download_url,
-                            :checksum,
-                            :is_inline
+                            :attachment_id,
+                            :size
                         )
                     """),
                     {
@@ -170,3 +153,46 @@ def registerEmailLoad(user_id: int, token: str, db):
         raise
 
     return messages
+
+
+
+
+def get_5_emails( user_id : int,query: str, max_results=5):
+    db = SessionLocal()
+    Query = text("""
+    SELECT refresh_token FROM gmail_accounts
+    WHERE user_id = :user_id
+""")
+
+    result = db.execute(Query, {"user_id": user_id}).mappings().first()
+
+    gmail = GmailService(
+        refresh_token=result["refresh_token"],
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET
+    )
+
+    messages = gmail.fetch_emails_by_category(query=query , max_results=max_results)
+    db.close()
+    return messages
+
+
+def getEmail(user_id : int, message_id: str):
+    db = SessionLocal()
+    Query = text("""
+        SELECT refresh_token FROM gmail_accounts
+        WHERE user_id = :user_id
+    """)
+    
+    result = db.execute(Query, {"user_id": user_id}).mappings().first()
+    gmail = GmailService(
+            refresh_token=result["refresh_token"],
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET
+        )
+    unstructured_mail = gmail.get_message(message_id=message_id)
+    mail = parse_email_full(unstructured_mail)
+    return mail
+
+
+
