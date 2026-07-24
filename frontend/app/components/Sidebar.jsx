@@ -9,6 +9,7 @@ import {
   Bell, Search, Settings, User, Mail, ChevronLeft,
   ChevronRight, LogOut, Sparkles, Menu, X,
   PenSquare,
+  Send
 } from 'lucide-react';
 
 
@@ -17,6 +18,8 @@ import {
 const NAV_ITEMS = [
   { id: '', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'inbox', label: 'Inbox', icon: Inbox, badge: 12 },
+  { id: 'sent', label: 'Sent', icon: Send, badge: 12 },
+  { id: 'drafts', label: 'Draft', icon: Mail, badge: 12 },
   { id: 'chat', label: 'AI Assistant', icon: MessageSquare, isAI: true },
   { id: 'workflows', label: 'AI Workflows', icon: Zap, isAI: true },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
