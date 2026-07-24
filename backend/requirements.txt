@@ -9,3 +9,7 @@ sqlalchemy
 pydantic_settings
 cryptography
 pymysql
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
