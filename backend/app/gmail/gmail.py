@@ -192,7 +192,44 @@ def getEmail(user_id : int, message_id: str):
         )
     unstructured_mail = gmail.get_message(message_id=message_id)
     mail = parse_email_full(unstructured_mail)
+
+    def sanitize_message(message):
+        if not isinstance(message, dict):
+            return message
+
+        sanitized = dict(message)
+        sanitized.pop("thread_messages", None)
+        return sanitized
+
+    if mail.get("thread_id"):
+        try:
+            thread_messages = gmail.get_thread_messages(mail["thread_id"])
+            ordered_messages = []
+            seen_ids = set()
+
+            for thread_message in thread_messages:
+                message_id_value = thread_message.get("id")
+                if not message_id_value or message_id_value in seen_ids:
+                    continue
+
+                seen_ids.add(message_id_value)
+                if message_id_value == mail.get("id"):
+                    ordered_messages.append(sanitize_message(mail))
+                else:
+                    ordered_messages.append(sanitize_message(thread_message))
+
+            if not ordered_messages:
+                ordered_messages = [sanitize_message(mail)]
+
+            mail["thread_messages"] = ordered_messages
+        except Exception:
+            mail["thread_messages"] = [sanitize_message(mail)]
+    else:
+        mail["thread_messages"] = [sanitize_message(mail)]
+
     return mail
+
+
 
 
 

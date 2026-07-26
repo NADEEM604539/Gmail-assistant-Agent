@@ -4,6 +4,8 @@ from app.auth.DTO import GoogleLoginRequest
 from app.auth.jwt.service import get_current_user
 from app.gmail.gmail import get_5_emails, getEmail
 from app.gmail.inbox_service import get_Inbox
+from app.gmail.sent_service import get_Sent
+from app.gmail.draft_service import get_Draft
 import os
 import httpx
 
@@ -51,7 +53,18 @@ def inbox(current_user= Depends(get_current_user)):
     return messages
 
 
-@router.get('/{email_id}')
+@router.get('/email/{email_id}')
 def getMail(email_id: str, current_user = Depends(get_current_user)):
     Email = getEmail(user_id=current_user["user_id"], message_id=email_id)
     return Email
+
+
+@router.get('/sent')
+def getSent(current_user = Depends(get_current_user)):
+    Sents = get_Sent(user_id=current_user["user_id"])
+    return Sents
+
+@router.get('/draft')
+def getDraft(current_user = Depends(get_current_user)):
+    Drafts = get_Draft(user_id=current_user["user_id"])
+    return Drafts
