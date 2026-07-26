@@ -17,11 +17,13 @@ import {
   Send,
   FileText,
   Mail,
+  Reply,
   MailOpen,
   AlertCircle,
   Check,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import AgentAssistant from "../components/AgentAssistant";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -166,7 +168,6 @@ export default function Inbox({ navigate }) {
       }
 
       const data = await response.json();
-      console.log(data);
       setEmails(data);
     } catch (err) {
       console.error(err);
@@ -413,7 +414,7 @@ export default function Inbox({ navigate }) {
             </div>
 
             {/* Content */}
-            <div className="min-w-0 flex-1 overflow-hidden" onClick={()=>router.push(`${getEmailCategory(email)}/${email.id}`)}>
+            <div className="min-w-0 flex-1 overflow-hidden" onClick={()=>router.push(`/email/${email.id}`)}>
               <div className="flex flex-wrap items-center gap-2" >
                 <span
                   className={`text-[14px] leading-5 break-words ${email.unread
@@ -496,6 +497,38 @@ export default function Inbox({ navigate }) {
           </div>
         )}
       </div>
+
+      <AgentAssistant
+        page="inbox"
+        title="Inbox Assistant"
+        subtitle="Search, summarize, and draft from this view"
+        contextLabel="Inbox"
+        contextSummary={activeFilterConfig.label}
+        itemCount={filtered.length}
+        featureButtons={[
+          {
+            id: "summarize",
+            label: "Summarize inbox",
+            description: "Explain the current inbox state",
+            icon: Sparkles,
+            reply: "I’ve reviewed the active inbox context and I’m summarizing what matters most.",
+          },
+          {
+            id: "find-urgent",
+            label: "Find urgent",
+            description: "Highlight priority messages",
+            icon: InboxIcon,
+            reply: "I’m focusing on the messages most likely to need quick attention.",
+          },
+          {
+            id: "draft-reply",
+            label: "Draft reply",
+            description: "Prepare a response for the selected thread",
+            icon: Reply,
+            reply: "I’m preparing a reply draft based on the current email context.",
+          },
+        ]}
+      />
 
       {/* Footer */}
       <div className="flex h-12 shrink-0 items-center justify-between border-t border-[#e8eaed] bg-[#f8f9fa] px-5 text-sm text-[#5f6368]">
