@@ -115,7 +115,6 @@ export default function Home({ user }) {
 
                 const data = await res.json();
 
-                console.log(data);
 
                 setStats(data.stats);
 
@@ -150,7 +149,6 @@ export default function Home({ user }) {
                 }
 
                 const data = await response.json();
-                console.log(data)
 
                 // backend returns { sections: [...] }
                 setSections(data || []);
