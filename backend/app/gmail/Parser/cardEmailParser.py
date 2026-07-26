@@ -57,6 +57,22 @@ def Card_email_parser(email):
         "time": format_time(email_date)
     }
 
+#   // {
+#   //   id: 2,
+#   //   to: 'Priya Nair',
+#   //   email: 'priya@notion.so',
+#   //   subject: 'Re: Meeting reschedule confirmed',
+#   //   preview: 'Thanks for the update — Thursday 2pm is good on my end. I’ll send the updated agenda shortly.',
+#   //   body: "Hi Priya, Thursday 2pm works great. I’ve updated the calendar invite and added the new agenda items for the product sync. Please let me know if we need to loop in engineering.",
+#   //   time: 'Yesterday',
+#   //   sentTime: 'Yesterday 4:20 PM',
+#   //   label: 'Meetings',
+#   //   status: 'Sent',
+#   //   hasAttachment: false,
+#   //   aiSummary: 'Confirmed rescheduled meeting and updated agenda',
+#   //   importance: 'medium',
+#   // },
+
 def get_headers(payload):
     headers = {}
 
