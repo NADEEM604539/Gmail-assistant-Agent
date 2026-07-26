@@ -9,6 +9,7 @@ from email.utils import getaddresses
 from email.utils import parsedate_to_datetime
 from app.gmail.Parser.cardEmailParser import Card_email_parser
 from app.gmail.Parser.shortEmailParser import Short_email_parser
+from app.gmail.Parser.fullEmailParser import parse_email_full
 
 
 
@@ -85,6 +86,26 @@ class GmailService:
             .execute()
         )
 
+    def get_thread_messages(self, thread_id):
+        response = (
+            self.service.users()
+            .threads()
+            .get(
+                userId="me",
+                id=thread_id,
+                format="full",
+            )
+            .execute()
+        )
+
+        messages = []
+        for item in response.get("messages", []):
+            parsed = parse_email_full(item)
+            messages.append(parsed)
+
+        messages.sort(key=lambda msg: (msg.get("internal_date") or 0, msg.get("id") or ""))
+        return messages
+
     def send_message(self, body):
         return (
             self.service.users()
@@ -110,13 +131,14 @@ class GmailService:
         )
 
 
-    def fetch_latest_emails(self, max_results=10):
+    def fetch_latest_emails(self, max_results=10, label="INBOX"):
         response = (
         self.service.users()
         .messages()
         .list(
             userId="me",
             maxResults=max_results,
+             labelIds=[label],
         )
         .execute()
     )
@@ -133,6 +155,7 @@ class GmailService:
                     userId="me",
                     id=msg["id"],
                     format="full",
+                   
                 )
                 .execute()
             )
