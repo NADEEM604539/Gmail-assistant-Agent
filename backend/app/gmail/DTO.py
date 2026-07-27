@@ -1,5 +1,43 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
+from types import SimpleNamespace
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class Attachment:
+    filename: str
+    content: Optional[bytes] = None
+    mime_type: Optional[str] = None
+
+
+@dataclass
+class DraftPayload:
+    subject: str
+    body: str
+    to: list = field(default_factory=list)
+    cc: list = field(default_factory=list)
+    bcc: list = field(default_factory=list)
+    attachments: list = field(default_factory=list)
+
+def parse_recipients(value: str):
+    """
+    Turns 'a@example.com,b@example.com' into a list of objects with
+    .name / .email attributes, matching what GmailService._build_message
+    expects (r.name, r.email).
+    """
+    if not value:
+        return []
+
+    recipients = []
+    for raw in value.split(","):
+        email = raw.strip()
+        if not email:
+            continue
+        recipients.append(SimpleNamespace(name=None, email=email))
+
+    return recipients
 
 
 class DraftRequest(BaseModel):
@@ -21,7 +59,7 @@ class DraftRequest(BaseModel):
     against: Optional[str] = Field(None, description="Optional identifier to attach this draft to (thread/project)")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "mode": "ai",
                 "topic": "Follow up on proposal",

@@ -10,6 +10,13 @@ from email.utils import parsedate_to_datetime
 from app.gmail.Parser.cardEmailParser import Card_email_parser
 from app.gmail.Parser.shortEmailParser import Short_email_parser
 from app.gmail.Parser.fullEmailParser import parse_email_full
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+import mimetypes
+import os
+from app.gmail.DTO import DraftPayload
 
 
 
@@ -233,3 +240,191 @@ class GmailService:
             )
 
         return emails
+
+
+    def _build_message(self, draft, include_attachments=True):
+        message = MIMEMultipart()
+
+        if draft.to:
+            message["To"] = ", ".join(
+                f"{r.name} <{r.email}>" if getattr(r, "name", None) else r.email
+                for r in draft.to
+            )
+
+        if draft.cc:
+            message["Cc"] = ", ".join(
+                f"{r.name} <{r.email}>" if getattr(r, "name", None) else r.email
+                for r in draft.cc
+            )
+
+        if draft.bcc:
+            message["Bcc"] = ", ".join(
+                f"{r.name} <{r.email}>" if getattr(r, "name", None) else r.email
+                for r in draft.bcc
+            )
+
+        message["Subject"] = draft.subject
+        message.attach(MIMEText(draft.body, "plain", "utf-8"))
+
+        if include_attachments:
+            for attachment in draft.attachments:
+                if getattr(attachment, "content", None) is not None:
+                    mime_type = attachment.mime_type or "application/octet-stream"
+                    maintype, subtype = (
+                        mime_type.split("/", 1)
+                        if "/" in mime_type
+                        else ("application", "octet-stream")
+                    )
+                    part = MIMEBase(maintype, subtype)
+                    part.set_payload(attachment.content)
+                    encoders.encode_base64(part)
+                    part.add_header(
+                        "Content-Disposition",
+                        f'attachment; filename="{os.path.basename(attachment.filename)}"',
+                    )
+                    message.attach(part)
+                    continue
+
+                if not os.path.exists(attachment.filename):
+                    continue
+
+                mime_type, _ = mimetypes.guess_type(attachment.filename)
+                if mime_type:
+                    maintype, subtype = mime_type.split("/", 1)
+                else:
+                    maintype, subtype = "application", "octet-stream"
+
+                with open(attachment.filename, "rb") as f:
+                    part = MIMEBase(maintype, subtype)
+                    part.set_payload(f.read())
+
+                encoders.encode_base64(part)
+                part.add_header(
+                    "Content-Disposition",
+                    f'attachment; filename="{os.path.basename(attachment.filename)}"',
+                )
+                message.attach(part)
+
+        return message
+
+    def create_draft(self, draft):
+        message = self._build_message(draft)
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        body = {"message": {"raw": raw}}
+
+        return (
+            self.service.users()
+            .drafts()
+            .create(userId="me", body=body)
+            .execute()
+        )
+
+    def get_draft_id(self, message_id: str):
+        """Returns the Gmail Draft ID corresponding to a Gmail Message ID.
+        Returns None if the message is not a draft.
+                """
+
+        drafts = (
+            self.service.users()
+            .drafts()
+            .list(userId="me")
+            .execute()
+        )
+
+        for draft in drafts.get("drafts", []):
+            full_draft = (
+                self.service.users()
+                .drafts()
+                .get(
+                    userId="me",
+                    id=draft["id"],
+                    format="minimal",
+                )
+                .execute()
+            )
+
+            if full_draft["message"]["id"] == message_id:
+                return draft["id"]
+
+        return None
+
+    def update_draft(self, draft_id: str, draft):
+        message = self._build_message(draft)
+
+        raw = base64.urlsafe_b64encode(
+            message.as_bytes()
+        ).decode()
+
+        body = {
+            "message": {
+                "raw": raw
+            }
+        }
+
+        result = (
+            self.service.users()
+            .drafts()
+            .update(
+                userId="me",
+                id=draft_id,
+                body=body,
+            )
+            .execute()
+        )
+
+        return {
+            "draft_id": result["id"],
+            "message_id": result["message"]["id"],  # New message ID
+            "thread_id": result["message"]["threadId"],
+        }
+
+
+    def send_draft(self, draft_id: str):
+        return (
+        self.service.users()
+        .drafts()
+        .send(
+            userId="me",
+            body={
+                "id": draft_id
+            }
+        )
+        .execute()
+    )
+
+    def delete_draft(self, draft_id: str):
+        (
+        self.service.users()
+        .drafts()
+        .delete(
+            userId="me",
+            id=draft_id,
+        )
+        .execute()
+    )
+
+        return {
+            "success": True
+        }
+
+
+    def send_updated_draft(self, message_id: str, draft:DraftPayload):
+        """
+        Given a Gmail *message_id* (not draft_id) and updated draft content,
+        resolves the underlying draft, pushes the new content to it, and
+        immediately sends it.
+        """
+        draft_id = self.get_draft_id(message_id)
+
+        if not draft_id:
+            raise ValueError(f"No draft found for message_id={message_id}")
+
+        updated = self.update_draft(draft_id, draft)
+
+        result = self.send_draft(updated["draft_id"])
+
+        return {
+            "success": True,
+            "message_id": result.get("id"),
+            "thread_id": result.get("threadId"),
+        }
