@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from app.auth.auth_controller import router as auth_router
 from app.gmail.gmail_controller import router as gmail_router
 from app.stats.stats_controller import router as stats_router
+from app.chatbot.chatbot_contoller import router as chat_router
 
 from app.database.database import Base
 from app.database.database import engine
@@ -38,3 +39,4 @@ def create_tables() -> None:
 app.include_router(auth_router, prefix='/api')
 app.include_router(gmail_router, prefix='/api')
 app.include_router(stats_router, prefix='/api')
+app.include_router(chat_router, prefix='/api')
