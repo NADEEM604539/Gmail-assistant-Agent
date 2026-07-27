@@ -429,7 +429,9 @@ export default function SentPage() {
         contextLabel="Sent"
         contextSummary={label !== 'All Labels' ? label : 'All sent mail'}
         itemCount={filtered.length}
-        featureButtons={[
+        selectedMessageIds={Array.from(selected)}
+        allMessageIds={filtered.map((m) => m.id)}
+        buttons={[
           {
             id: 'follow-up',
             label: 'Follow-up ideas',

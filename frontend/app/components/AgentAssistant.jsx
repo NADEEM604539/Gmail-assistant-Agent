@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bot,
   CheckCircle2,
@@ -9,6 +9,7 @@ import {
   MessageSquareText,
   PenSquare,
   Reply,
+  Button,
   Search,
   Send,
   Sparkles,
@@ -49,68 +50,73 @@ export default function AgentAssistant({
   contextLabel = "Current view",
   contextSummary = "",
   itemCount = 0,
-  featureButtons = [],
-  onAction,
+  selectedMessageIds = [],
+  allMessageIds = [],
+  buttons = []
 }) {
+  const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
+
   const [isOpen, setIsOpen] = useState(true);
   const [messages, setMessages] = useState(() => INITIAL_MESSAGES[page] || INITIAL_MESSAGES.inbox);
   const [draft, setDraft] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [typingDots, setTypingDots] = useState(1);
+  const messagesEndRef = useRef(null);
 
-  const buttons = useMemo(() => {
-    if (featureButtons.length) return featureButtons;
+  useEffect(() => {
+    if (!isLoading) return;
+    const interval = window.setInterval(() => {
+      setTypingDots((prev) => (prev >= 3 ? 1 : prev + 1));
+    }, 500);
+    return () => window.clearInterval(interval);
+  }, [isLoading]);
 
-    return [
-      {
-        id: "summarize",
-        label: "Summarize",
-        description: "Explain the current context",
-        icon: Sparkles,
-        reply: "I’ve reviewed the current context and I’m summarizing the key details for you.",
-      },
-      {
-        id: "search",
-        label: "Search",
-        description: "Find what matters fastest",
-        icon: Search,
-        reply: "I’m narrowing the current view to the most relevant items.",
-      },
-      {
-        id: "draft",
-        label: "Draft",
-        description: "Create a polished response",
-        icon: PenSquare,
-        reply: "I’m preparing a ready-to-send draft based on this context.",
-      },
-    ];
-  }, [featureButtons]);
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [messages, isLoading]);
 
-  const handleSend = (event) => {
+  const handleSend = async (event) => {
     event.preventDefault();
-
-    if (!draft.trim()) return;
-
     const userText = draft.trim();
-    setMessages((prev) => [...prev, { role: "user", text: userText }]);
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "assistant",
-        text: `I’m using your current ${contextLabel.toLowerCase()} context to help with: “${userText}”.`,
-      },
-    ]);
+    if (!userText) return;
+
+    setMessages((prev) => [...prev, { role: "user", text: userText }] );
     setDraft("");
-  };
+    setIsLoading(true);
 
-  const handleButton = (button) => {
-    if (button.reply) {
-      setMessages((prev) => [...prev, { role: "assistant", text: button.reply }]);
+    const idsToSend = Array.isArray(selectedMessageIds) && selectedMessageIds.length > 0 ? selectedMessageIds : (Array.isArray(allMessageIds) ? allMessageIds : []);
+
+    try {
+      const token = typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
+      const res = await fetch(`${API}/api/chatbot`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ message: userText, message_ids: idsToSend }),
+      });
+
+      let reply = "Sorry, no response.";
+      if (res.ok) {
+        const data = await res.json();
+        reply = data.reply || data.message || data.result || JSON.stringify(data);
+      } else {
+        reply = `Error: ${res.status}`;
+      }
+
+      setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
+    } catch (err) {
+      console.error(err);
+      setMessages((prev) => [...prev, { role: "assistant", text: "Sorry, something went wrong." }]);
+    } finally {
+      setIsLoading(false);
     }
-
-    if (onAction) {
-      onAction(button.id);
-    }
   };
-
+  // Buttons removed: single-send handling via the compose form.
   return (
     <div className="fixed bottom-4 right-4 z-40 w-[min(92vw,360px)]">
       {!isOpen ? (
@@ -148,11 +154,17 @@ export default function AgentAssistant({
               <span className="rounded-full bg-[#e8f0fe] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#1a73e8]">
                 {contextLabel}
               </span>
-              {itemCount > 0 && (
+              {selectedMessageIds.length > 0 ? (
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                  {selectedMessageIds.length} items
+                </span>
+              ):
+             (
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
                   {itemCount} items
                 </span>
-              )}
+             )
+              }
               {contextSummary && (
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
                   {contextSummary}
@@ -166,7 +178,10 @@ export default function AgentAssistant({
                 return (
                   <button
                     key={button.id}
-                    onClick={() => handleButton(button)}
+                    onClick={() => {
+                      setDraft(button.description)
+                    }
+                    }
                     className="flex items-start gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-[#1a73e8] hover:bg-[#f7faff]"
                   >
                     <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#e8f0fe] text-[#1a73e8]">
@@ -189,16 +204,26 @@ export default function AgentAssistant({
                 className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-2xl px-3 py-2.5 text-sm leading-5 ${
-                    message.role === "user"
-                      ? "bg-[#1a73e8] text-white"
-                      : "border border-slate-200 bg-slate-50 text-slate-700"
-                  }`}
+                  className={`max-w-[85%] rounded-2xl px-3 py-2.5 text-sm leading-5 ${message.role === "user"
+                    ? "bg-[#1a73e8] text-white"
+                    : "border border-slate-200 bg-slate-50 text-slate-700"
+                    }`}
                 >
                   {message.text}
                 </div>
               </div>
             ))}
+
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="max-w-[65%] rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm leading-5 text-slate-700">
+                  <span className="font-semibold">Typing</span>
+                  <span className="ml-1">{".".repeat(typingDots)}</span>
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
           </div>
 
           <form onSubmit={handleSend} className="border-t border-slate-100 bg-white p-3">

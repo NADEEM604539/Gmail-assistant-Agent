@@ -1149,7 +1149,9 @@ export default function EmailPage() {
         contextLabel={folderMeta.label}
         contextSummary={email?.subject || "Current email"}
         itemCount={email?.attachments?.length || 0}
-        featureButtons={[
+        selectedMessageIds={id ? [id] : []}
+        allMessageIds={threadMessages.length > 0 ? threadMessages.map((m) => m.id) : [id]}
+        buttons={[
           {
             id: "summarize",
             label: "Summarize",
