@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS `emails` (
     `user_id` BIGINT UNSIGNED NOT NULL,
     `gmail_message_id` VARCHAR(255) NOT NULL,
     `gmail_thread_id` VARCHAR(255) NOT NULL,
+    `gmail_draft_id` VARCHAR(255) NULL,
     `history_id` BIGINT UNSIGNED NOT NULL,
     `folder` ENUM(
         'inbox',
