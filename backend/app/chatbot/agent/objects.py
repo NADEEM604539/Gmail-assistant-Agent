@@ -13,6 +13,7 @@ class EmailAttachment(BaseModel):
     filename: str
     mime_type: str
     description: Optional[str] = None
+    content: Optional[bytes] = None
 
 
 class DraftEmail(BaseModel):
@@ -22,8 +23,8 @@ class DraftEmail(BaseModel):
     bcc: List[EmailRecipient] = Field(default_factory=list)
 
     # Email
-    subject: str
-    body: str
+    subject: str = Field(..., min_length=1)
+    body: str = Field(..., min_length=1)
 
     # Metadata
     tone: Literal[
