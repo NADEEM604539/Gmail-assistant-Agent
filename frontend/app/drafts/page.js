@@ -498,10 +498,6 @@ export default function DraftsPage() {
       <NewDraftPopup
         open={showNewDraftPopup}
         onClose={() => setShowNewDraftPopup(false)}
-        onSubmit={(payload) => {
-          console.log('New draft payload:', payload);
-          setShowNewDraftPopup(false);
-        }}
       />
     </div>
   )

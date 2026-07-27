@@ -158,6 +158,21 @@ function splitEmails(text = "") {
     .map((email) => ({ email }));
 }
 
+function normalizeRecipient(value = "") {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  const match = trimmed.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match ? match[0] : trimmed;
+}
+
+function parseRecipientList(values = []) {
+  return values
+    .map((value) => normalizeRecipient(value))
+    .filter(Boolean)
+    .join(",");
+}
+
 const FOLDER_META = {
   inbox: { label: "Inbox", icon: InboxIcon },
   sent: { label: "Sent", icon: Send },
@@ -189,12 +204,20 @@ export default function EmailPage() {
 
   // Draft-editing state
   const [draftFields, setDraftFields] = useState({
-    to: "",
-    cc: "",
-    bcc: "",
     subject: "",
     body: "",
   });
+  const [draftRecipients, setDraftRecipients] = useState({
+    to: [],
+    cc: [],
+    bcc: [],
+  });
+  const [draftRecipientInputs, setDraftRecipientInputs] = useState({
+    to: "",
+    cc: "",
+    bcc: "",
+  });
+  const [draftAttachments, setDraftAttachments] = useState([]);
   const [ccBccOpen, setCcBccOpen] = useState(false);
   const [draftStatus, setDraftStatus] = useState("idle"); // idle | saving | saved | error
   const [sending, setSending] = useState(false);
@@ -215,12 +238,16 @@ export default function EmailPage() {
   useEffect(() => {
     if (email && email.folder === "draft") {
       setDraftFields({
-        to: (email.to || []).map((r) => r.email).join(", "),
-        cc: (email.cc || []).map((r) => r.email).join(", "),
-        bcc: (email.bcc || []).map((r) => r.email).join(", "),
         subject: email.subject || "",
         body: email.body_plain || email.body || "",
       });
+      setDraftRecipients({
+        to: (email.to || []).map((r) => r.name ? `${r.name} <${r.email}>` : r.email),
+        cc: (email.cc || []).map((r) => r.name ? `${r.name} <${r.email}>` : r.email),
+        bcc: (email.bcc || []).map((r) => r.name ? `${r.name} <${r.email}>` : r.email),
+      });
+      setDraftRecipientInputs({ to: "", cc: "", bcc: "" });
+      setDraftAttachments([]);
       setCcBccOpen(Boolean(email.cc?.length || email.bcc?.length));
     }
   }, [email]);
@@ -281,52 +308,71 @@ export default function EmailPage() {
 
   // ---- Draft actions -----------------------------------------------------
 
+  const persistDraft = async () => {
+    const headers = authHeader();
+    if (!headers) return false;
+
+    const formData = new FormData();
+    formData.append("subject", draftFields.subject || "");
+    formData.append("body", draftFields.body || "");
+    formData.append("to", parseRecipientList(draftRecipients.to));
+    formData.append("cc", parseRecipientList(draftRecipients.cc));
+    formData.append("bcc", parseRecipientList(draftRecipients.bcc));
+    draftAttachments.forEach((file) => formData.append("attachments", file));
+
+    const res = await fetch(`${API}/api/gmail/draft/${id}`, {
+      method: "PATCH",
+      headers,
+      body: formData,
+    });
+
+    if (!res.ok) throw new Error();
+    return true;
+  };
+
   const handleSaveDraft = async () => {
     setDraftStatus("saving");
-    const headers = authHeader();
-    if (!headers) return;
 
     try {
-      const res = await fetch(`${API}/api/gmail/draft/${id}`, {
-        method: "PATCH",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: splitEmails(draftFields.to),
-          cc: splitEmails(draftFields.cc),
-          bcc: splitEmails(draftFields.bcc),
-          subject: draftFields.subject,
-          body: draftFields.body,
-        }),
-      });
-      if (!res.ok) throw new Error();
+      const ok = await persistDraft();
+      if (!ok) throw new Error();
       setDraftStatus("saved");
-      setTimeout(() => setDraftStatus("idle"), 2000);
+      router.push('/drafts')
     } catch {
       setDraftStatus("error");
     }
   };
 
-  const handleSendDraft = async () => {
-    setSending(true);
+ const handleSendDraft = async () => {
+  setSending(true);
+
+  try {
     const headers = authHeader();
-    if (!headers) {
-      setSending(false);
-      return;
-    }
+    if (!headers) throw new Error();
 
-    try {
-      const res = await fetch(`${API}/api/gmail/draft/${id}/send`, {
-        method: "POST",
-        headers,
-      });
-      if (!res.ok) throw new Error();
-      router.push("/drafts");
-    } catch {
-      setDraftStatus("error");
-    } finally {
-      setSending(false);
-    }
-  };
+    const formData = new FormData();
+    formData.append("subject", draftFields.subject || "");
+    formData.append("body", draftFields.body || "");
+    formData.append("to", parseRecipientList(draftRecipients.to));
+    formData.append("cc", parseRecipientList(draftRecipients.cc));
+    formData.append("bcc", parseRecipientList(draftRecipients.bcc));
+    draftAttachments.forEach((file) => formData.append("attachments", file));
+
+    const res = await fetch(`${API}/api/gmail/${id}/send_draft`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    if (!res.ok) throw new Error();
+
+    router.push("/drafts");
+  } catch {
+    setDraftStatus("error");
+  } finally {
+    setSending(false);
+  }
+};
 
   const handleDiscardDraft = async () => {
     const headers = authHeader();
@@ -342,6 +388,54 @@ export default function EmailPage() {
     } finally {
       router.push("/drafts");
     }
+  };
+
+  const handleRecipientKeyDown = (field, event) => {
+    const value = draftRecipientInputs[field].trim();
+
+    if ((event.key === "Enter" || event.key === "," || event.key === "Tab") && value) {
+      event.preventDefault();
+      const normalized = normalizeRecipient(value);
+      if (!normalized) return;
+      setDraftRecipients((prev) => ({ ...prev, [field]: [...prev[field], normalized] }));
+      setDraftRecipientInputs((prev) => ({ ...prev, [field]: "" }));
+      return;
+    }
+
+    if (event.key === " " && value) {
+      event.preventDefault();
+      const normalized = normalizeRecipient(value);
+      if (!normalized) return;
+      setDraftRecipients((prev) => ({ ...prev, [field]: [...prev[field], normalized] }));
+      setDraftRecipientInputs((prev) => ({ ...prev, [field]: "" }));
+      return;
+    }
+
+    if (event.key === "Backspace" && !value && draftRecipients[field].length) {
+      event.preventDefault();
+      setDraftRecipients((prev) => ({
+        ...prev,
+        [field]: prev[field].slice(0, -1),
+      }));
+    }
+  };
+
+  const removeRecipientChip = (field, index) => {
+    setDraftRecipients((prev) => ({
+      ...prev,
+      [field]: prev[field].filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleDraftFiles = (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    setDraftAttachments((prev) => [...prev, ...files]);
+    event.target.value = "";
+  };
+
+  const removeDraftAttachment = (index) => {
+    setDraftAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
   // ---- AI chat -------------------------------------------------------------
@@ -582,22 +676,13 @@ export default function EmailPage() {
           )}
 
           <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={() => setAiOpen((v) => !v)}
-              title="AI Assistant"
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                aiOpen
-                  ? "bg-gradient-to-r from-[#4285f4] via-[#9b72cb] to-[#d96570] text-white"
-                  : "border border-[#dadce0] text-[#3c4043] hover:bg-[#f1f3f4]"
-              }`}
-            >
-              <Sparkles size={14} className={aiOpen ? "text-white" : "text-[#8430ce]"} />
-              AI
-            </button>
-
             <div className="mx-1 h-6 w-px bg-[#dadce0]" />
 
-            <button title="Print" className="rounded-full p-2 hover:bg-[#e8eaed]">
+            <button
+              title="Print"
+              onClick={() => window.print()}
+              className="rounded-full p-2 hover:bg-[#e8eaed]"
+            >
               <Printer size={18} className="text-[#5f6368]" />
             </button>
             <button
@@ -758,14 +843,28 @@ export default function EmailPage() {
                 <div className="space-y-2 text-[14px]">
                   <div className="flex items-center gap-3">
                     <span className="w-12 shrink-0 text-[#5f6368]">To</span>
-                    <input
-                      value={draftFields.to}
-                      onChange={(e) =>
-                        setDraftFields((f) => ({ ...f, to: e.target.value }))
-                      }
-                      placeholder="Recipients"
-                      className="flex-1 border-b border-transparent bg-transparent py-1 text-[#202124] outline-none focus:border-[#1a73e8] placeholder:text-[#9aa0a6]"
-                    />
+                    <div className="flex min-h-[40px] flex-1 flex-wrap items-center gap-2 rounded-lg border border-[#e8eaed] bg-[#f8f9fa] px-3 py-2">
+                      {draftRecipients.to.map((recipient, index) => (
+                        <button
+                          key={`${recipient}-${index}`}
+                          type="button"
+                          onClick={() => removeRecipientChip("to", index)}
+                          className="flex items-center gap-1 rounded-full border border-[#dadce0] bg-white px-2.5 py-1 text-[12px] text-[#202124]"
+                        >
+                          {recipient}
+                          <X size={12} />
+                        </button>
+                      ))}
+                      <input
+                        value={draftRecipientInputs.to}
+                        onChange={(e) =>
+                          setDraftRecipientInputs((prev) => ({ ...prev, to: e.target.value }))
+                        }
+                        onKeyDown={(e) => handleRecipientKeyDown("to", e)}
+                        placeholder={draftRecipients.to.length ? "" : "Add recipients"}
+                        className="min-w-[140px] flex-1 bg-transparent py-1 text-[#202124] outline-none placeholder:text-[#9aa0a6]"
+                      />
+                    </div>
                     <button
                       onClick={() => setCcBccOpen((v) => !v)}
                       className="shrink-0 text-[13px] text-[#5f6368] hover:text-[#1a73e8]"
@@ -778,25 +877,93 @@ export default function EmailPage() {
                     <>
                       <div className="flex items-center gap-3">
                         <span className="w-12 shrink-0 text-[#5f6368]">Cc</span>
-                        <input
-                          value={draftFields.cc}
-                          onChange={(e) =>
-                            setDraftFields((f) => ({ ...f, cc: e.target.value }))
-                          }
-                          className="flex-1 border-b border-transparent bg-transparent py-1 text-[#202124] outline-none focus:border-[#1a73e8] placeholder:text-[#9aa0a6]"
-                        />
+                        <div className="flex min-h-[40px] flex-1 flex-wrap items-center gap-2 rounded-lg border border-[#e8eaed] bg-[#f8f9fa] px-3 py-2">
+                          {draftRecipients.cc.map((recipient, index) => (
+                            <button
+                              key={`${recipient}-${index}`}
+                              type="button"
+                              onClick={() => removeRecipientChip("cc", index)}
+                              className="flex items-center gap-1 rounded-full border border-[#dadce0] bg-white px-2.5 py-1 text-[12px] text-[#202124]"
+                            >
+                              {recipient}
+                              <X size={12} />
+                            </button>
+                          ))}
+                          <input
+                            value={draftRecipientInputs.cc}
+                            onChange={(e) =>
+                              setDraftRecipientInputs((prev) => ({ ...prev, cc: e.target.value }))
+                            }
+                            onKeyDown={(e) => handleRecipientKeyDown("cc", e)}
+                            placeholder={draftRecipients.cc.length ? "" : "Cc recipients"}
+                            className="min-w-[120px] flex-1 bg-transparent py-1 text-[#202124] outline-none placeholder:text-[#9aa0a6]"
+                          />
+                        </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="w-12 shrink-0 text-[#5f6368]">Bcc</span>
-                        <input
-                          value={draftFields.bcc}
-                          onChange={(e) =>
-                            setDraftFields((f) => ({ ...f, bcc: e.target.value }))
-                          }
-                          className="flex-1 border-b border-transparent bg-transparent py-1 text-[#202124] outline-none focus:border-[#1a73e8] placeholder:text-[#9aa0a6]"
-                        />
+                        <div className="flex min-h-[40px] flex-1 flex-wrap items-center gap-2 rounded-lg border border-[#e8eaed] bg-[#f8f9fa] px-3 py-2">
+                          {draftRecipients.bcc.map((recipient, index) => (
+                            <button
+                              key={`${recipient}-${index}`}
+                              type="button"
+                              onClick={() => removeRecipientChip("bcc", index)}
+                              className="flex items-center gap-1 rounded-full border border-[#dadce0] bg-white px-2.5 py-1 text-[12px] text-[#202124]"
+                            >
+                              {recipient}
+                              <X size={12} />
+                            </button>
+                          ))}
+                          <input
+                            value={draftRecipientInputs.bcc}
+                            onChange={(e) =>
+                              setDraftRecipientInputs((prev) => ({ ...prev, bcc: e.target.value }))
+                            }
+                            onKeyDown={(e) => handleRecipientKeyDown("bcc", e)}
+                            placeholder={draftRecipients.bcc.length ? "" : "Bcc recipients"}
+                            className="min-w-[120px] flex-1 bg-transparent py-1 text-[#202124] outline-none placeholder:text-[#9aa0a6]"
+                          />
+                        </div>
                       </div>
                     </>
+                  )}
+                </div>
+
+                <div className="mt-4 rounded-xl border border-dashed border-[#dadce0] p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-[13px] text-[#5f6368]">
+                      <Paperclip size={14} />
+                      Attach files
+                    </div>
+                    <label className="cursor-pointer rounded-full border border-[#dadce0] px-3 py-1.5 text-[12px] font-medium text-[#3c4043] transition hover:bg-[#f1f3f4]">
+                      <input
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={handleDraftFiles}
+                      />
+                      Add files
+                    </label>
+                  </div>
+
+                  {draftAttachments.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {draftAttachments.map((file, index) => (
+                        <div
+                          key={`${file.name}-${index}`}
+                          className="flex items-center gap-2 rounded-full border border-[#dadce0] bg-[#f8f9fa] px-2.5 py-1.5 text-[12px] text-[#202124]"
+                        >
+                          <span className="max-w-[180px] truncate">{file.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeDraftAttachment(index)}
+                            className="rounded-full p-0.5 hover:bg-[#e8eaed]"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
 
