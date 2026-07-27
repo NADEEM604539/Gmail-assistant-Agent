@@ -505,7 +505,9 @@ export default function Inbox({ navigate }) {
         contextLabel="Inbox"
         contextSummary={activeFilterConfig.label}
         itemCount={filtered.length}
-        featureButtons={[
+        selectedMessageIds={Array.from(selected)}
+        allMessageIds={filtered.map((e) => e.id)}
+        buttons={[
           {
             id: "summarize",
             label: "Summarize inbox",
