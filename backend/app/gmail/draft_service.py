@@ -3,6 +3,7 @@ import os
 from app.gmail.gmail_service import GmailService
 from sqlalchemy import text
 from app.database.database import SessionLocal
+from app.gmail.DTO import DraftRequest
 load_dotenv()
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -28,3 +29,9 @@ def get_Draft(user_id : int, max_results=100):
     messages = gmail.fetch_latest_emails(max_results=max_results, label="DRAFT")
     db.close()
     return messages
+
+def genAI_draft(request:DraftRequest, user_id: int):
+    email = 
+
+def gen_draft(request:DraftRequest, user_id: int):
+    email = request

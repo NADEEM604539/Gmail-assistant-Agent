@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from app.auth.auth_service import googleLogin
 from app.auth.DTO import GoogleLoginRequest
 from app.auth.jwt.service import get_current_user
@@ -6,8 +6,8 @@ from app.gmail.gmail import get_5_emails, getEmail
 from app.gmail.inbox_service import get_Inbox
 from app.gmail.sent_service import get_Sent
 from app.gmail.draft_service import get_Draft
-import os
-import httpx
+from app.gmail.DTO import DraftRequest
+from app.gmail.draft_service import genAI_draft, gen_draft
 
 
 router = APIRouter(
@@ -49,7 +49,7 @@ def cards(current_user= Depends(get_current_user)):
 
 @router.get('/inbox')
 def inbox(current_user= Depends(get_current_user)):
-    messages = get_Inbox(user_id=current_user["user_id"], max_results=100)
+    messages = get_Inbox(user_id=current_user["user_id"], max_results=10)
     return messages
 
 
@@ -68,3 +68,13 @@ def getSent(current_user = Depends(get_current_user)):
 def getDraft(current_user = Depends(get_current_user)):
     Drafts = get_Draft(user_id=current_user["user_id"])
     return Drafts
+
+@router.post('/draft/create')
+def createDraft(request: DraftRequest, current_user = Depends(get_current_user)):
+    if DraftRequest.mode == "ai":
+        draft = genAI_draft(request=DraftRequest, user_id=current_user["user_id"])
+    else:
+        draft = gen_draft(request=DraftRequest, user_id= current_user["user_id"])
+
+    return draft
+
