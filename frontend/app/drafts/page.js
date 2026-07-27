@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import AgentAssistant from '../components/AgentAssistant'
+import NewDraftPopup from '../components/NewDraftPopup'
 import {
   PenSquare,
   ArrowRight,
@@ -124,6 +125,7 @@ export default function DraftsPage() {
   const [activeDraftId, setActiveDraftId] = useState(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const [showBulkDelete, setShowBulkDelete] = useState(false)
+  const [showNewDraftPopup, setShowNewDraftPopup] = useState(false)
 
   // Loading / error state for the live fetch
   const [loading, setLoading] = useState(true)
@@ -269,9 +271,9 @@ export default function DraftsPage() {
           <p className="mt-2 text-sm text-[#5f6368] max-w-2xl">Review your in-progress email drafts, confirm deletion before removing them, and open each draft for detailed controls.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Link href="/drafts/new" className="inline-flex items-center gap-2 rounded-full bg-[#1a73e8] px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-[#1a73e825] hover:bg-[#1662d9] transition">
+          <button onClick={() => setShowNewDraftPopup(true)} className="inline-flex items-center gap-2 rounded-full bg-[#1a73e8] px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-[#1a73e825] hover:bg-[#1662d9] transition">
             <PenSquare size={16} /> New draft
-          </Link>
+          </button>
           <button className="inline-flex items-center gap-2 rounded-full bg-[#fbbc04] px-4 py-2 text-sm font-semibold text-[#202124] transition hover:bg-[#f7b521]">
             <ArrowRight size={16} /> Continue
           </button>
@@ -448,7 +450,9 @@ export default function DraftsPage() {
         contextLabel="Drafts"
         contextSummary={label !== 'All Labels' ? label : 'Draft workspace'}
         itemCount={drafts.length}
-        featureButtons={[
+        selectedMessageIds={Array.from(selected)}
+        allMessageIds={filtered.map((d) => d.id)}
+        buttons={[
           {
             id: 'rewrite',
             label: 'Rewrite',
@@ -490,6 +494,15 @@ export default function DraftsPage() {
           </div>
         </div>
       )}
+
+      <NewDraftPopup
+        open={showNewDraftPopup}
+        onClose={() => setShowNewDraftPopup(false)}
+        onSubmit={(payload) => {
+          console.log('New draft payload:', payload);
+          setShowNewDraftPopup(false);
+        }}
+      />
     </div>
   )
 }
