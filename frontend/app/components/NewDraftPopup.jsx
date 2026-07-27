@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { X, Sparkles, PenLine, ChevronDown, ChevronUp } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -16,9 +17,9 @@ function invalidEmails(list) {
   return list.filter((email) => !EMAIL_REGEX.test(email));
 }
 
-export default function NewDraftPopup({ open, onClose, onSubmit }) {
+export default function NewDraftPopup({ open, onClose }) {
   const [mode, setMode] = useState("ai"); // "ai" | "manual"
-
+  const router = useRouter()
   // Manual mode fields
   const [to, setTo] = useState("");
   const [showCcBcc, setShowCcBcc] = useState(false);
@@ -36,17 +37,33 @@ export default function NewDraftPopup({ open, onClose, onSubmit }) {
   const [targetLength, setTargetLength] = useState("");
 
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!open) {
     return null;
   }
 
-  const resetForNextOpen = () => {
+  const resetForm = () => {
+    setMode("ai");
+    setTo("");
+    setShowCcBcc(false);
+    setCc("");
+    setBcc("");
+    setManualSubject("");
+    setBody("");
+    setTopic("");
+    setAiRecipients("");
+    setAiSubject("");
+    setTone("Professional");
+    setContext("");
+    setTargetLength("");
     setErrors({});
+    setSubmitError("");
   };
 
   const handleClose = () => {
-    resetForNextOpen();
+    resetForm();
     onClose();
   };
 
@@ -93,7 +110,7 @@ export default function NewDraftPopup({ open, onClose, onSubmit }) {
     return { nextErrors, recipientsList };
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     if (mode === "manual") {
@@ -104,14 +121,54 @@ export default function NewDraftPopup({ open, onClose, onSubmit }) {
       }
 
       setErrors({});
-      onSubmit({
+      setSubmitError("");
+      setIsSubmitting(true);
+
+      const payload = {
         mode: "manual",
         to: toList,
         cc: ccList,
         bcc: bccList,
         subject: manualSubject.trim(),
         body: body.trim(),
-      });
+      };
+
+      try {
+        const token = typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
+        if (!token) {
+          throw new Error("No access token found. Please sign in again.");
+        }
+
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/gmail/draft/create`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || "Failed to create draft");
+        }
+
+        const data = await response.json();
+        const email_id = data?.message?.id;
+
+        resetForm();
+        onClose();
+
+        if (email_id) {
+          router.push(`/email/${email_id}`);
+        } else {
+          router.push("/drafts");
+        }
+      } catch (error) {
+        setSubmitError(error.message || "Failed to create draft.");
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
@@ -122,7 +179,10 @@ export default function NewDraftPopup({ open, onClose, onSubmit }) {
     }
 
     setErrors({});
-    onSubmit({
+    setSubmitError("");
+    setIsSubmitting(true);
+
+    const payload = {
       mode: "ai",
       topic: topic.trim(),
       recipients: recipientsList,
@@ -130,7 +190,44 @@ export default function NewDraftPopup({ open, onClose, onSubmit }) {
       tone,
       context: context.trim() || undefined,
       target_word_count: targetLength ? Number(targetLength) : undefined,
-    });
+    };
+
+    try {
+      const token = typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
+      if (!token) {
+        throw new Error("No access token found. Please sign in again.");
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/gmail/draft/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to create draft");
+      }
+
+      const data = await response.json();
+      const email_id = data?.message?.id;
+
+      resetForm();
+      onClose();
+
+      if (email_id) {
+        router.push(`/email/${email_id}`);
+      } else {
+        router.push("/drafts");
+      }
+    } catch (error) {
+      setSubmitError(error.message || "Failed to create draft.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const fieldBase =
@@ -344,21 +441,28 @@ export default function NewDraftPopup({ open, onClose, onSubmit }) {
             )}
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="rounded-full bg-[#1a73e8] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#1662d9]"
-            >
-              {mode === "manual" ? "Save draft" : "Generate draft"}
-            </button>
+          <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
+            {submitError && (
+              <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+                {submitError}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="rounded-full bg-[#1a73e8] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#1662d9] disabled:cursor-not-allowed disabled:bg-[#8ab4f8]"
+              >
+                {isSubmitting ? "Creating..." : mode === "manual" ? "Save draft" : "Generate draft"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
