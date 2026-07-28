@@ -36,6 +36,8 @@ def get_dashboard_stats(user_id: int):
         }
     ).fetchone()
 
+    db.close()
+
     return [
         {
             "id": 1,
