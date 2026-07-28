@@ -5,12 +5,12 @@ from app.auth.DTO import GoogleLoginRequest
 from app.auth.jwt.service import get_current_user
 from app.chatbot.agent.objects import DraftEmail, EmailAttachment, EmailRecipient
 from app.gmail.gmail import get_5_emails, getEmail
-from app.gmail.inbox_service import get_Inbox
+from app.gmail.inbox_service import get_Inbox, deleteBunch, trashBunch
 from app.gmail.sent_service import get_Sent, draft_Sent
 from app.gmail.draft_service import get_Draft
-from app.gmail.DTO import DraftRequest, Attachment, DraftPayload
+from app.gmail.DTO import DraftRequest, Attachment, DraftPayload, MessageIdsRequest
 from app.gmail.draft_service import genAI_draft, gen_draft, update_draft, send_draft, delete_draft
-
+from app.gmail.reply_service import create_reply_draft, forward_email, reply_to_email , update_reply_draft
 
 router = APIRouter(
     prefix='/gmail',
@@ -22,7 +22,7 @@ def cards(current_user= Depends(get_current_user)):
     user_id = current_user["user_id"]
     sections = [
     {
-        "key": "received",
+        "key": "inbox",
         "title": "Last received",
         "accent": "#4285F4",
         "items": get_5_emails(user_id, "in:inbox")
@@ -40,7 +40,7 @@ def cards(current_user= Depends(get_current_user)):
         "items": get_5_emails(user_id, "in:draft")
     },
     {
-        "key": "important",
+        "key": "inbox/",
         "title": "Last importants",
         "accent": "#0DB927",
         "items": get_5_emails(user_id, "is:important")
@@ -149,6 +149,185 @@ async def send_draft_route(
     return result
 
 
+# ---------------------------------------------------------------------------
+# ADDITIONS TO: your gmail router file (the one with `router = APIRouter(prefix='/gmail', ...)`)
+#
+# 1. Add these imports near your existing ones:
+#      from app.chatbot.agent.objects import EmailRecipient, EmailAttachment
+#      from app.gmail.reply_service import (
+#          reply_to_email,
+#          forward_email,
+#          create_reply_draft,
+#          update_reply_draft,
+#      )
+#
+# 2. DELETE the existing stub at the bottom of your file:
+#      @router.post('/email/{message_id}/reply')
+#      def Reply():
+#          pass
+#
+# 3. Add the four routes below in its place.
+#
+# Frontend contract these match (from ReplyBox.jsx):
+#   POST  /gmail/email/{message_id}/reply          FormData: body, reply_all, attachments[]
+#   POST  /gmail/email/{message_id}/forward         FormData: body, to[] (repeated), attachments[]
+#   POST  /gmail/email/{message_id}/draft            FormData: mode, body, reply_all, to[], attachments[]
+#   PATCH /gmail/email/{message_id}/draft/{draft_id} FormData: mode, body, reply_all, to[], attachments[]
+#
+# All four routes accept multipart/form-data, same as your existing
+# /draft/{message_id} PATCH and /{message_id}/send_draft routes — so your
+# frontend should send ALL of these as FormData (not JSON), even when
+# there are no attachments. That keeps every draft/reply/forward endpoint
+# on one consistent content type.
+# ---------------------------------------------------------------------------
+
+
 @router.post('/email/{message_id}/reply')
-def Reply():
-    pass
+async def Reply(
+    message_id: str,
+    body: str = Form(...),
+    reply_all: str = Form("false"),
+    attachments: list[UploadFile] = File(default=[]),
+    current_user=Depends(get_current_user),
+):
+    files = [
+        EmailAttachment(
+            filename=f.filename,
+            mime_type=f.content_type or "application/octet-stream",
+            content=await f.read(),
+        )
+        for f in attachments
+        if getattr(f, "filename", None)
+    ]
+
+    return reply_to_email(
+        message_id=message_id,
+        user_id=current_user["user_id"],
+        body=body,
+        reply_all=reply_all.lower() == "true",
+        attachments=files,
+    )
+
+
+@router.post('/email/{message_id}/forward')
+async def Forward(
+    message_id: str,
+    to: list[str] = Form(...),
+    body: str = Form(...),
+    attachments: list[UploadFile] = File(default=[]),
+    current_user=Depends(get_current_user),
+):
+    files = [
+        EmailAttachment(
+            filename=f.filename,
+            mime_type=f.content_type or "application/octet-stream",
+            content=await f.read(),
+        )
+        for f in attachments
+        if getattr(f, "filename", None)
+    ]
+    recipients = [EmailRecipient(email=addr.strip()) for addr in to if addr and addr.strip()]
+
+    return forward_email(
+        message_id=message_id,
+        user_id=current_user["user_id"],
+        to=recipients,
+        body=body,
+        attachments=files,
+    )
+
+
+@router.post('/email/{message_id}/draft')
+async def createReplyDraft(
+    message_id: str,
+    mode: str = Form(...),  # 'reply' | 'replyAll' | 'forward'
+    body: str = Form(""),
+    reply_all: str = Form("false"),
+    to: list[str] = Form(default=[]),
+    attachments: list[UploadFile] = File(default=[]),
+    current_user=Depends(get_current_user),
+):
+    files = [
+        EmailAttachment(
+            filename=f.filename,
+            mime_type=f.content_type or "application/octet-stream",
+            content=await f.read(),
+        )
+        for f in attachments
+        if getattr(f, "filename", None)
+    ]
+    recipients = [EmailRecipient(email=addr.strip()) for addr in to if addr and addr.strip()]
+
+    return create_reply_draft(
+        message_id=message_id,
+        user_id=current_user["user_id"],
+        mode=mode,
+        body=body,
+        reply_all=reply_all.lower() == "true",
+        to=recipients,
+        attachments=files,
+    )
+
+# ---------------------------------------------------------------------------
+# REPLACES the earlier PATCH /email/{message_id}/draft/{draft_id} route.
+#
+# New route: PATCH /email/{message_id}/draft
+#   -> `message_id` here is the DRAFT's own message id (the one returned
+#      as "id" by POST /email/{message_id}/draft when the draft was
+#      created). Only one id, as requested.
+#
+# The POST /email/{message_id}/draft route (create) is UNCHANGED — that one
+# still needs the ORIGINAL email's message_id, since that's the one place
+# we genuinely have to look up what's being replied to.
+# ---------------------------------------------------------------------------
+
+@router.patch('/email/{message_id}/draft')
+async def updateReplyDraft(
+    message_id: str,
+    body: str = Form(""),
+    to: list[str] = Form(default=[]),
+    attachments: list[UploadFile] = File(default=[]),
+    current_user=Depends(get_current_user),
+):
+    files = [
+        EmailAttachment(
+            filename=f.filename,
+            mime_type=f.content_type or "application/octet-stream",
+            content=await f.read(),
+        )
+        for f in attachments
+        if getattr(f, "filename", None)
+    ]
+
+    # Only override recipients if the frontend actually sent some
+    # (forward mode). For reply/reply-all, `to` is omitted and the
+    # existing recipients on the draft are reused automatically.
+    recipients = [EmailRecipient(email=addr.strip()) for addr in to if addr and addr.strip()]
+    recipients = recipients or None
+
+    return update_reply_draft(
+        message_id=message_id,
+        user_id=current_user["user_id"],
+        body=body,
+        to=recipients,
+        attachments=files,
+    )
+
+
+@router.post("/api/gmail/messages/trash")
+async def trash_messages(
+    request: MessageIdsRequest,
+    current_user=Depends(get_current_user),
+):
+    
+    trash_status = trashBunch(current_user["user_id"], request=request)
+    return trash_status
+
+@router.post("/api/gmail/messages/delete")
+async def delete_messages(
+    request: MessageIdsRequest,
+    current_user=Depends(get_current_user),
+):
+    delete_status = deleteBunch(current_user["user_id"], request=request)
+
+    return delete_status

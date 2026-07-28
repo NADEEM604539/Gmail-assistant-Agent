@@ -224,6 +224,8 @@ def getEmail(user_id : int, message_id: str):
             mail["thread_messages"] = ordered_messages
         except Exception:
             mail["thread_messages"] = [sanitize_message(mail)]
+        finally:
+            db.close()
     else:
         mail["thread_messages"] = [sanitize_message(mail)]
 

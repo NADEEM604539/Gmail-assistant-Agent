@@ -133,6 +133,7 @@ def genAI_draft(request: DraftRequest, user_id: int):
         client_secret=GOOGLE_CLIENT_SECRET
     )
     draft_email = gmail.create_draft(email)
+    db.close()
     print(draft_email)
     return draft_email
 
@@ -152,5 +153,5 @@ def gen_draft(request: DraftRequest, user_id: int):
         client_secret=GOOGLE_CLIENT_SECRET
     )
     draft_email = gmail.create_draft(_normalize_request_to_draft(request))
-    print(draft_email)
+    db.close()
     return draft_email

@@ -18,6 +18,7 @@ from email import encoders
 import mimetypes
 import os
 from app.gmail.DTO import DraftPayload
+from app.chatbot.agent.objects import DraftEmail, EmailRecipient
 
 
 
@@ -468,3 +469,383 @@ class GmailService:
 
         walk(payload.get("parts", []))
         return attachments
+
+    # ---------------------------------------------------------------------------
+# ADDITIONS TO: app/gmail/gmail_service.py  (class GmailService)
+# ---------------------------------------------------------------------------
+#
+# 1. Replace your existing `_build_message` with the version below — it's
+#    the same as what you have, plus an optional `thread_headers` arg that
+#    sets In-Reply-To / References so Gmail actually threads the message.
+#
+# 2. Add all the new methods below `_build_message` to the class.
+#
+# Needed extra imports at the top of gmail_service.py:
+#   from email.utils import parseaddr, getaddresses
+#   from app.chatbot.agent.objects import DraftEmail, EmailRecipient
+# (parseaddr/getaddresses are already imported in your file — keep only
+#  one copy if so.)
+# ---------------------------------------------------------------------------
+
+
+    def _build_message(self, draft, include_attachments=True, thread_headers=None):
+        message = MIMEMultipart()
+
+        if draft.to:
+            message["To"] = ", ".join(
+                f"{r.name} <{r.email}>" if getattr(r, "name", None) else r.email
+                for r in draft.to
+            )
+
+        if draft.cc:
+            message["Cc"] = ", ".join(
+                f"{r.name} <{r.email}>" if getattr(r, "name", None) else r.email
+                for r in draft.cc
+            )
+
+        if draft.bcc:
+            message["Bcc"] = ", ".join(
+                f"{r.name} <{r.email}>" if getattr(r, "name", None) else r.email
+                for r in draft.bcc
+            )
+
+        message["Subject"] = draft.subject
+        message.attach(MIMEText(draft.body, "plain", "utf-8"))
+
+        # --- NEW: thread this message to an original message, if given -------
+        if thread_headers and thread_headers.get("message_id_header"):
+            msg_id = thread_headers["message_id_header"]
+            references = thread_headers.get("references") or ""
+            message["In-Reply-To"] = msg_id
+            message["References"] = f"{references} {msg_id}".strip()
+        # ------------------------------------------------------------------
+
+        if include_attachments:
+            for attachment in draft.attachments:
+                if getattr(attachment, "content", None) is not None:
+                    mime_type = attachment.mime_type or "application/octet-stream"
+                    maintype, subtype = (
+                        mime_type.split("/", 1)
+                        if "/" in mime_type
+                        else ("application", "octet-stream")
+                    )
+                    part = MIMEBase(maintype, subtype)
+                    part.set_payload(attachment.content)
+                    encoders.encode_base64(part)
+                    part.add_header(
+                        "Content-Disposition",
+                        f'attachment; filename="{os.path.basename(attachment.filename)}"',
+                    )
+                    message.attach(part)
+                    continue
+
+                if not os.path.exists(attachment.filename):
+                    continue
+
+                mime_type, _ = mimetypes.guess_type(attachment.filename)
+                if mime_type:
+                    maintype, subtype = mime_type.split("/", 1)
+                else:
+                    maintype, subtype = "application", "octet-stream"
+
+                with open(attachment.filename, "rb") as f:
+                    part = MIMEBase(maintype, subtype)
+                    part.set_payload(f.read())
+
+                encoders.encode_base64(part)
+                part.add_header(
+                    "Content-Disposition",
+                    f'attachment; filename="{os.path.basename(attachment.filename)}"',
+                )
+                message.attach(part)
+
+        return message
+
+
+# ---------------------------------------------------------------------------
+# NEW METHODS — add these to the GmailService class
+# ---------------------------------------------------------------------------
+
+    def get_my_email(self):
+        """The signed-in account's own address — used to drop yourself out of
+        the Cc list when building a reply-all."""
+        profile = self.service.users().getProfile(userId="me").execute()
+        return profile.get("emailAddress", "")
+
+
+    def _get_original_context(self, original_message_id):
+        """Pulls the bits of the original message needed to thread a reply or
+        forward: its Gmail threadId, its Message-ID header (for In-Reply-To),
+        its References header, subject, and From/To/Cc for recipient building.
+        """
+        original = self.get_message(original_message_id)
+        payload = original.get("payload", {})
+        headers = {h["name"]: h["value"] for h in payload.get("headers", [])}
+
+        return {
+            "thread_id": original.get("threadId"),
+            "message_id_header": headers.get("Message-ID") or headers.get("Message-Id"),
+            "references": headers.get("References", ""),
+            "subject": headers.get("Subject", ""),
+            "from": headers.get("From", ""),
+            "to": headers.get("To", ""),
+            "cc": headers.get("Cc", ""),
+        }
+
+
+    def _build_reply_recipients(self, context, reply_all: bool):
+        """to = original sender. cc (only if reply_all) = everyone else on the
+        original To/Cc, minus the original sender and minus yourself."""
+        sender_name, sender_email = parseaddr(context.get("from", ""))
+        to_recipients = (
+            [EmailRecipient(email=sender_email, name=sender_name or None)]
+            if sender_email
+            else []
+        )
+
+        cc_recipients = []
+        if reply_all:
+            my_email = self.get_my_email().lower()
+            seen = {sender_email.lower()} if sender_email else set()
+
+            for name, addr in getaddresses([context.get("to", ""), context.get("cc", "")]):
+                if not addr:
+                    continue
+                lowered = addr.lower()
+                if lowered in seen or lowered == my_email:
+                    continue
+                seen.add(lowered)
+                cc_recipients.append(EmailRecipient(email=addr, name=name or None))
+
+        return to_recipients, cc_recipients
+
+
+    def send_reply(self, original_message_id, body, reply_all=False, attachments=None):
+        """Sends a real reply immediately (not a draft), threaded into the
+        original conversation via In-Reply-To / References / threadId."""
+        context = self._get_original_context(original_message_id)
+        to_recipients, cc_recipients = self._build_reply_recipients(context, reply_all)
+
+        subject = context["subject"] or ""
+        if not subject.lower().startswith("re:"):
+            subject = f"Re: {subject}"
+
+        draft = DraftEmail(
+            subject=subject,
+            body=body,
+            tone="professional",
+            to=to_recipients,
+            cc=cc_recipients,
+            bcc=[],
+            attachments=attachments or [],
+        )
+
+        message = self._build_message(draft, thread_headers=context)
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+        send_body = {"raw": raw}
+        if context["thread_id"]:
+            send_body["threadId"] = context["thread_id"]
+
+        return self.send_message(send_body)
+
+
+    def send_forward(self, original_message_id, to, body, attachments=None):
+        """Sends a forward immediately. Forwards go to new recipients, so they
+        intentionally start a new thread rather than being appended to the
+        original conversation."""
+        context = self._get_original_context(original_message_id)
+
+        subject = context["subject"] or ""
+        if not subject.lower().startswith("fwd:"):
+            subject = f"Fwd: {subject}"
+
+        draft = DraftEmail(
+            subject=subject,
+            body=body,
+            tone="professional",
+            to=to or [],
+            cc=[],
+            bcc=[],
+            attachments=attachments or [],
+        )
+
+        message = self._build_message(draft)
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+        return self.send_message({"raw": raw})
+
+
+    def create_reply_draft(self, mode, original_message_id, body, reply_all=False, to=None, attachments=None):
+        """Creates a NEW Gmail draft for a reply/reply-all/forward that's still
+        in progress. Returns the draft id AND the draft's own message id — the
+        message id is what you hand back to the frontend, since every other
+        draft route in this codebase (`update_draft`, `send_draft`,
+        `delete_draft`) already resolves the real draft id from a message id
+        via `get_draft_id`. That means once this draft exists, it also works
+        with those existing generic endpoints for free.
+        """
+        context = self._get_original_context(original_message_id)
+
+        if mode == "forward":
+            subject = context["subject"] or ""
+            if not subject.lower().startswith("fwd:"):
+                subject = f"Fwd: {subject}"
+            to_recipients = to or []
+            cc_recipients = []
+            thread_headers = None
+            thread_id = None
+        else:
+            subject = context["subject"] or ""
+            if not subject.lower().startswith("re:"):
+                subject = f"Re: {subject}"
+            to_recipients, cc_recipients = self._build_reply_recipients(context, reply_all)
+            thread_headers = context
+            thread_id = context["thread_id"]
+
+        draft = DraftEmail(
+            subject=subject,
+            body=body,
+            tone="professional",
+            to=to_recipients,
+            cc=cc_recipients,
+            bcc=[],
+            attachments=attachments or [],
+        )
+
+        message = self._build_message(draft, thread_headers=thread_headers)
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+        create_body = {"message": {"raw": raw}}
+        if thread_id:
+            create_body["message"]["threadId"] = thread_id
+
+        result = self.service.users().drafts().create(userId="me", body=create_body).execute()
+
+        return {
+            "draft_id": result["id"],
+            "message_id": result["message"]["id"],
+            "thread_id": result["message"].get("threadId"),
+        }
+
+
+
+    # ---------------------------------------------------------------------------
+# REPLACES the earlier `update_reply_draft` in app/gmail/gmail_service.py
+#
+# Old design needed TWO ids (the original email + the draft). This version
+# needs only ONE: the draft's own message_id. Everything else — subject,
+# recipients, and the In-Reply-To / References threading headers — is read
+# straight off the draft's current state in Gmail, since `create_reply_draft`
+# already baked all of that in when the draft was first made.
+#
+# `create_reply_draft` (from the previous message) is unchanged — it still
+# needs the ORIGINAL email's message_id, because that's the one time we
+# genuinely need to look up what we're replying to. After that, every
+# update is self-contained.
+# ---------------------------------------------------------------------------
+
+    def update_reply_draft(self, draft_message_id, body, to=None, attachments=None):
+        """
+        Rewrites an in-progress reply/forward draft using only its own
+        message id.
+
+        - subject: reused unchanged from the draft's current Subject header
+        - to: reused from the draft's current To header, UNLESS `to` is passed
+        in (this is the only case that needs it — editing forward recipients)
+        - cc: always reused from the draft's current Cc header
+        - In-Reply-To / References: copied verbatim from the draft's current
+        headers, so the thread link set up at creation is never lost
+        """
+        draft_id = self.get_draft_id(draft_message_id)
+        if not draft_id:
+            raise ValueError(f"No draft found for message_id={draft_message_id}")
+
+        existing = self.get_message(draft_message_id)
+        payload = existing.get("payload", {})
+        headers = {h["name"]: h["value"] for h in payload.get("headers", [])}
+        thread_id = existing.get("threadId")
+
+        subject = headers.get("Subject", "")
+
+        if to is not None:
+            to_recipients = to
+        else:
+            to_recipients = [
+                EmailRecipient(email=addr, name=name or None)
+                for name, addr in getaddresses([headers.get("To", "")])
+                if addr
+            ]
+
+        cc_recipients = [
+            EmailRecipient(email=addr, name=name or None)
+            for name, addr in getaddresses([headers.get("Cc", "")])
+            if addr
+        ]
+
+        draft = DraftEmail(
+            subject=subject,
+            body=body,
+            tone="professional",
+            to=to_recipients,
+            cc=cc_recipients,
+            bcc=[],
+            attachments=attachments or [],
+        )
+
+        # No auto-append thread_headers here — we copy the existing headers
+        # verbatim instead, so repeated saves don't keep re-appending the same
+        # message id onto References.
+        message = self._build_message(draft)
+
+        if headers.get("In-Reply-To"):
+            message["In-Reply-To"] = headers["In-Reply-To"]
+        if headers.get("References"):
+            message["References"] = headers["References"]
+
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+        update_body = {"message": {"raw": raw}}
+        if thread_id:
+            update_body["message"]["threadId"] = thread_id
+
+        result = (
+            self.service.users()
+            .drafts()
+            .update(userId="me", id=draft_id, body=update_body)
+            .execute()
+        )
+
+        return {
+            "draft_id": result["id"],
+            "message_id": result["message"]["id"],
+            "thread_id": result["message"].get("threadId"),
+        }
+
+    def trash_messages(self, message_ids: list[str]):
+        success = []
+
+        for message_id in message_ids:
+                self.service.users().messages().trash(
+                    userId="me",
+                    id=message_id
+                ).execute()
+
+                success.append(message_id)
+
+        return {
+            "success": True
+        }
+
+    
+    def delete_messages(self, message_ids: list[str]):
+        self.service.users().messages().batchDelete(
+                userId="me",
+                body={
+                    "ids": message_ids
+                }
+            ).execute()
+
+        return {
+                "success": True
+            }

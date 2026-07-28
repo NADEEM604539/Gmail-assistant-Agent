@@ -68,3 +68,7 @@ class DraftRequest(BaseModel):
                 "target_word_count": 120,
             }
         }
+
+
+class MessageIdsRequest(BaseModel):
+    message_ids: list[str] = Field(..., min_length=1)
