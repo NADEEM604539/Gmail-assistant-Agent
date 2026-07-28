@@ -63,7 +63,7 @@ export default function MessagesCard({ section }) {
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         router.push(
-                                            `/${section.key}/${item.email_id}`
+                                            `/email/${item.email_id}`
                                         );
                                     }}
                                     className="flex cursor-pointer items-center justify-between rounded-xl bg-[#FAFBFF] px-3 py-2.5 transition-all duration-300 hover:bg-white hover:shadow-sm"
