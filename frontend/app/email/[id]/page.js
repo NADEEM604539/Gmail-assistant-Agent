@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReplyBox from "@/app/components/ReplyBox";
 import { useRouter, useParams } from "next/navigation";
 import AgentAssistant from "../../components/AgentAssistant";
 import {
@@ -1467,104 +1468,14 @@ export default function EmailPage() {
                   <Trash2 size={15} /> Discard
                 </button>
               </div>
-            ) : (
-              <div className="mt-8 border-t border-[#e8eaed] pt-5">
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={() => openReplyMode("reply")}
-                    className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
-                      replyMode === "reply"
-                        ? "border-[#1a73e8] bg-[#e8f0fe] text-[#1a73e8]"
-                        : "border-[#dadce0] text-[#3c4043] hover:bg-[#f1f3f4]"
-                    }`}
-                  >
-                    <Reply size={15} />
-                    Reply
-                  </button>
-                  <button
-                    onClick={() => openReplyMode("replyAll")}
-                    className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
-                      replyMode === "replyAll"
-                        ? "border-[#1a73e8] bg-[#e8f0fe] text-[#1a73e8]"
-                        : "border-[#dadce0] text-[#3c4043] hover:bg-[#f1f3f4]"
-                    }`}
-                  >
-                    <ReplyAll size={15} />
-                    Reply all
-                  </button>
-                  <button
-                    onClick={() => openReplyMode("forward")}
-                    className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
-                      replyMode === "forward"
-                        ? "border-[#1a73e8] bg-[#e8f0fe] text-[#1a73e8]"
-                        : "border-[#dadce0] text-[#3c4043] hover:bg-[#f1f3f4]"
-                    }`}
-                  >
-                    <Forward size={15} />
-                    Forward
-                  </button>
-                </div>
-
-                {replyMode && (
-                  <div className="mt-4 rounded-2xl border border-[#dadce0] shadow-sm">
-                    <div className="flex items-center justify-between border-b border-[#e8eaed] px-4 py-2.5">
-                      <span className="text-[13px] font-medium text-[#5f6368]">
-                        {replyMode === "reply" &&
-                          `Reply to ${email.from?.name || email.from?.email}`}
-                        {replyMode === "replyAll" && "Reply to all"}
-                        {replyMode === "forward" && "Forward message"}
-                      </span>
-                      <button
-                        onClick={() => setReplyMode(null)}
-                        className="rounded-full p-1 hover:bg-[#f1f3f4]"
-                      >
-                        <X size={15} className="text-[#5f6368]" />
-                      </button>
-                    </div>
-
-                    {replyMode === "forward" && (
-                      <div className="border-b border-[#e8eaed] px-4 py-2.5">
-                        <input
-                          value={forwardTo}
-                          onChange={(e) => setForwardTo(e.target.value)}
-                          placeholder="Recipients, separated by commas"
-                          className="w-full bg-transparent text-[13px] text-[#202124] outline-none placeholder:text-[#9aa0a6]"
-                        />
-                      </div>
-                    )}
-
-                    <textarea
-                      value={replyBody}
-                      onChange={(e) => setReplyBody(e.target.value)}
-                      rows={5}
-                      placeholder="Write your message..."
-                      className="w-full resize-none px-4 py-3 text-[14px] text-[#202124] outline-none placeholder:text-[#9aa0a6]"
-                    />
-
-                    {replyError && (
-                      <div className="px-4 pb-1 text-[12px] text-[#d93025]">{replyError}</div>
-                    )}
-
-                    <div className="flex items-center justify-between rounded-b-2xl border-t border-[#e8eaed] px-4 py-2.5">
-                      <button
-                        onClick={handleSendReply}
-                        disabled={replySending}
-                        className="flex items-center gap-2 rounded-full bg-[#1a73e8] px-5 py-2 text-sm font-medium text-white hover:bg-[#1765cc] disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {replySending && <Loader2 size={14} className="animate-spin" />}
-                        {replySending ? "Sending…" : "Send"}
-                      </button>
-                      <button
-                        onClick={() => setReplyMode(null)}
-                        className="rounded-full p-2 hover:bg-[#f1f3f4]"
-                      >
-                        <Trash2 size={16} className="text-[#5f6368]" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            ) :(
+  <ReplyBox
+    emailId={id}
+    email={email}
+    onSent={() => fetchEmail()}  // refresh thread after a reply/forward
+  />
+)}
+           
           </div>
         </div>
 
