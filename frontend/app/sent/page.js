@@ -19,6 +19,7 @@ import {
   Inbox,
   RefreshCw,
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL
 
@@ -66,6 +67,7 @@ export default function SentPage() {
   const [query, setQuery] = useState('')
   const [showAI, setShowAI] = useState(true)
   const [activeId, setActiveId] = useState(null)
+  const router = useRouter()
 
   const fetchSent = async () => {
     setLoading(true)
@@ -312,7 +314,7 @@ export default function SentPage() {
                           {initials(message.displayName, message.displayEmail)}
                         </div>
 
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0 flex-1" onClick={()=>router.push(`/email/${message.id}`)}>
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
                               <h2 className="text-[15px] font-semibold text-slate-900 truncate flex items-center gap-1.5">
