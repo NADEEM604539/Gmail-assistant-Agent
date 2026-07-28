@@ -45,7 +45,7 @@ def trashBunch(user_id : int, request: MessageIdsRequest):
         client_secret=GOOGLE_CLIENT_SECRET
     )
 
-    messages = gmail.trash_messages(message_ids=request)
+    messages = gmail.trash_messages(message_ids=request.message_ids)
     db.close()
     return messages
 
@@ -64,7 +64,7 @@ def deleteBunch(user_id:int,  request: MessageIdsRequest):
         client_secret=GOOGLE_CLIENT_SECRET
     )
 
-    messages = gmail.delete_messages(message_ids=request)
+    messages = gmail.delete_messages(message_ids=request.message_ids)
     db.close()
     return messages
 
