@@ -117,6 +117,69 @@ export default function Inbox({ navigate }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const manageTrash = async () => {
+    if (selected.size === 0) return;
+
+    const token = localStorage.getItem("access_token");
+
+    try {
+      const response = await fetch(`${API}/api/gmail/messages/trash`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message_ids: Array.from(selected),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to move emails to trash");
+      }
+
+      await fetchEmails(token);
+      setSelected(new Set());
+    } catch (err) {
+      console.error(err);
+      alert("Unable to move emails to trash.");
+    }
+  };
+  const manageDelete = async () => {
+    if (selected.size === 0) return;
+
+    const token = localStorage.getItem("access_token");
+
+    const confirmed = window.confirm(
+      "Permanently delete the selected emails?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`${API}/api/gmail/messages/delete`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message_ids: Array.from(selected),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to permanently delete emails");
+      }
+
+      await fetchEmails(token);
+      setSelected(new Set());
+    } catch (err) {
+      console.error(err);
+      alert("Unable to permanently delete emails.");
+    }
+  };
+
   const initialize = async () => {
     setLoading(true);
 
@@ -198,7 +261,7 @@ export default function Inbox({ navigate }) {
   // Handle a row click: figure out the email's category and route there
   const handleEmailClick = (email) => {
     const category = getEmailCategory(email);
-    navigate?.(`${category}/${email.id}`);
+    navigate?.(`email/${email.id}`);
   };
 
   const activeFilterConfig = useMemo(
@@ -281,15 +344,16 @@ export default function Inbox({ navigate }) {
             </span>
 
             <button
-              title="Archive"
+              title="Trash"
               className="flex h-10 w-10 items-center justify-center rounded-full text-[#5f6368] transition-all duration-150 hover:bg-[#fce8e6] hover:text-[#d93025]"
-            >
+              onClick={manageTrash} >
               <Archive size={20} strokeWidth={2.2} />
             </button>
 
             <button
               title="Delete"
               className="flex h-10 w-10 items-center justify-center rounded-full text-[#5f6368] transition-all duration-150 hover:bg-[#fce8e6] hover:text-[#d93025]"
+              onClick={manageDelete}
             >
               <Trash2 size={20} strokeWidth={2.2} />
             </button>
@@ -414,7 +478,7 @@ export default function Inbox({ navigate }) {
             </div>
 
             {/* Content */}
-            <div className="min-w-0 flex-1 overflow-hidden" onClick={()=>router.push(`/email/${email.id}`)}>
+            <div className="min-w-0 flex-1 overflow-hidden" onClick={() => router.push(`/email/${email.id}`)}>
               <div className="flex flex-wrap items-center gap-2" >
                 <span
                   className={`text-[14px] leading-5 break-words ${email.unread

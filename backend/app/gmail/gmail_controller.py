@@ -314,7 +314,7 @@ async def updateReplyDraft(
     )
 
 
-@router.post("/api/gmail/messages/trash")
+@router.post("/messages/trash")
 async def trash_messages(
     request: MessageIdsRequest,
     current_user=Depends(get_current_user),
@@ -323,11 +323,10 @@ async def trash_messages(
     trash_status = trashBunch(current_user["user_id"], request=request)
     return trash_status
 
-@router.post("/api/gmail/messages/delete")
+@router.post("/messages/delete")
 async def delete_messages(
     request: MessageIdsRequest,
     current_user=Depends(get_current_user),
 ):
     delete_status = deleteBunch(current_user["user_id"], request=request)
-
     return delete_status
