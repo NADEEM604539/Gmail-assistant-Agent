@@ -45,6 +45,7 @@ import {
   Sparkles,
   Loader2,
   Users,
+  SearchX,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
@@ -55,6 +56,8 @@ const SUGGESTED_PROMPTS = [
   "List any action items",
   "Translate this to Spanish",
 ];
+
+const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -150,18 +153,9 @@ function securityBadge(verdict) {
   };
 }
 
-function splitEmails(text = "") {
-  return text
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((email) => ({ email }));
-}
-
 function normalizeRecipient(value = "") {
   const trimmed = value.trim();
   if (!trimmed) return "";
-
   const match = trimmed.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
   return match ? match[0] : trimmed;
 }
@@ -171,6 +165,10 @@ function parseRecipientList(values = []) {
     .map((value) => normalizeRecipient(value))
     .filter(Boolean)
     .join(",");
+}
+
+function isValidEmail(value = "") {
+  return EMAIL_REGEX.test(normalizeRecipient(value));
 }
 
 const FOLDER_META = {
@@ -194,13 +192,21 @@ export default function EmailPage() {
   const [email, setEmail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [notFound, setNotFound] = useState(false);
 
   const [starred, setStarred] = useState(false);
   const [unread, setUnread] = useState(false);
   const [recipientsOpen, setRecipientsOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [replyMode, setReplyMode] = useState(null); // 'reply' | 'replyAll' | 'forward' | null
+  const [replyBody, setReplyBody] = useState("");
+  const [forwardTo, setForwardTo] = useState("");
+  const [replySending, setReplySending] = useState(false);
+  const [replyError, setReplyError] = useState(null);
   const [iframeHeight, setIframeHeight] = useState(200);
+
+  // Toolbar action state (per-action loading so buttons can disable individually)
+  const [actionLoading, setActionLoading] = useState(null);
 
   // Draft-editing state
   const [draftFields, setDraftFields] = useState({
@@ -242,9 +248,9 @@ export default function EmailPage() {
         body: email.body_plain || email.body || "",
       });
       setDraftRecipients({
-        to: (email.to || []).map((r) => r.name ? `${r.name} <${r.email}>` : r.email),
-        cc: (email.cc || []).map((r) => r.name ? `${r.name} <${r.email}>` : r.email),
-        bcc: (email.bcc || []).map((r) => r.name ? `${r.name} <${r.email}>` : r.email),
+        to: (email.to || []).map((r) => (r.name ? `${r.name} <${r.email}>` : r.email)),
+        cc: (email.cc || []).map((r) => (r.name ? `${r.name} <${r.email}>` : r.email)),
+        bcc: (email.bcc || []).map((r) => (r.name ? `${r.name} <${r.email}>` : r.email)),
       });
       setDraftRecipientInputs({ to: "", cc: "", bcc: "" });
       setDraftAttachments([]);
@@ -252,30 +258,48 @@ export default function EmailPage() {
     }
   }, [email]);
 
+  // ---- Auth / fetch helpers ----------------------------------------------
+
   const authHeader = () => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      router.replace("/");
+      router.push("/");
       return null;
     }
     return { Authorization: `Bearer ${token}` };
   };
 
+  // Wraps fetch with auth header + 401 handling so every action below
+  // doesn't have to repeat the same boilerplate.
+  const authedFetch = async (url, options = {}) => {
+    const headers = authHeader();
+    if (!headers) return null;
+
+    const res = await fetch(url, {
+      ...options,
+      headers: { ...headers, ...(options.headers || {}) },
+    });
+
+    if (res.status === 401) {
+      localStorage.removeItem("access_token");
+      router.push("/");
+      return null;
+    }
+
+    return res;
+  };
+
   const fetchEmail = async () => {
     setLoading(true);
     setError(null);
-
-    const headers = authHeader();
-    if (!headers) return;
+    setNotFound(false);
 
     try {
-      const response = await fetch(`${API}/api/gmail/email/${id}`, {
-        headers,
-      });
+      const response = await authedFetch(`${API}/api/gmail/email/${id}`);
+      if (!response) return; // redirected to login
 
-      if (response.status === 401) {
-        localStorage.removeItem("access_token");
-        router.replace("/");
+      if (response.status === 404) {
+        setNotFound(true);
         return;
       }
 
@@ -306,83 +330,174 @@ export default function EmailPage() {
     }
   };
 
+  // ---- Mailbox actions (star, read, archive, trash, spam, delete) --------
+  // Endpoint names below are a convention — implement matching routes
+  // under app/gmail if they don't exist yet.
+
+  const runAction = async (key, url, { method = "POST", body, onSuccess, navigateAway } = {}) => {
+    setActionLoading(key);
+    try {
+      const res = await authedFetch(url, {
+        method,
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!res) return;
+      if (!res.ok) throw new Error(`Action "${key}" failed`);
+
+      onSuccess?.();
+      if (navigateAway) router.push(navigateAway);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const toggleStar = () => {
+    const next = !starred;
+    setStarred(next); // optimistic
+    runAction(
+      "star",
+      `${API}/api/gmail/email/${id}/star`,
+      {
+        body: { starred: next },
+        onSuccess: () => {},
+      }
+    ).catch(() => setStarred(!next));
+  };
+
+  const toggleRead = () => {
+    const next = !unread;
+    setUnread(next);
+    runAction("read", `${API}/api/gmail/email/${id}/read`, {
+      body: { unread: next },
+    });
+  };
+
+  const archiveEmail = () =>
+    runAction("archive", `${API}/api/gmail/email/${id}/archive`, {
+      navigateAway: "/inbox",
+    });
+
+  const trashEmail = () =>
+    runAction("trash", `${API}/api/gmail/email/${id}/trash`, {
+      navigateAway: "/inbox",
+    });
+
+  const untrashEmail = () =>
+    runAction("untrash", `${API}/api/gmail/email/${id}/untrash`, {
+      navigateAway: "/inbox",
+    });
+
+  const deleteForever = () =>
+    runAction("delete-forever", `${API}/api/gmail/email/${id}`, {
+      method: "DELETE",
+      navigateAway: "/trash",
+    });
+
+  const markSpam = () =>
+    runAction("spam", `${API}/api/gmail/email/${id}/spam`, {
+      navigateAway: "/inbox",
+    });
+
+  const markNotSpam = () =>
+    runAction("not-spam", `${API}/api/gmail/email/${id}/not-spam`, {
+      navigateAway: "/inbox",
+    });
+
   // ---- Draft actions -----------------------------------------------------
 
-  const persistDraft = async () => {
-    const headers = authHeader();
-    if (!headers) return false;
+  // Any text still sitting in the recipient input boxes (not yet turned
+  // into a chip) needs to be committed before we submit, otherwise a
+  // recipient typed right before hitting Send/Save silently gets dropped.
+  const getCommittedRecipients = () => {
+    const result = { ...draftRecipients };
+    ["to", "cc", "bcc"].forEach((field) => {
+      const pending = draftRecipientInputs[field].trim();
+      if (pending) {
+        const normalized = normalizeRecipient(pending);
+        if (normalized) result[field] = [...result[field], normalized];
+      }
+    });
+    return result;
+  };
 
+  // True only when there's at least one syntactically valid "To" recipient,
+  // either already chipped or currently typed in the input box.
+  const hasValidRecipient = useMemo(() => {
+    const committed = draftRecipients.to.some((r) => isValidEmail(r));
+    const pending = isValidEmail(draftRecipientInputs.to);
+    return committed || pending;
+  }, [draftRecipients.to, draftRecipientInputs.to]);
+
+  const buildDraftFormData = (recipients) => {
     const formData = new FormData();
     formData.append("subject", draftFields.subject || "");
     formData.append("body", draftFields.body || "");
-    formData.append("to", parseRecipientList(draftRecipients.to));
-    formData.append("cc", parseRecipientList(draftRecipients.cc));
-    formData.append("bcc", parseRecipientList(draftRecipients.bcc));
+    formData.append("to", parseRecipientList(recipients.to));
+    formData.append("cc", parseRecipientList(recipients.cc));
+    formData.append("bcc", parseRecipientList(recipients.bcc));
     draftAttachments.forEach((file) => formData.append("attachments", file));
+    return formData;
+  };
 
-    const res = await fetch(`${API}/api/gmail/draft/${id}`, {
+  const persistDraft = async () => {
+    const recipients = getCommittedRecipients();
+    const formData = buildDraftFormData(recipients);
+
+    const res = await authedFetch(`${API}/api/gmail/draft/${id}`, {
       method: "PATCH",
-      headers,
       body: formData,
     });
 
+    if (!res) return false;
     if (!res.ok) throw new Error();
     return true;
   };
 
   const handleSaveDraft = async () => {
     setDraftStatus("saving");
-
     try {
       const ok = await persistDraft();
-      if (!ok) throw new Error();
+      if (!ok) return;
       setDraftStatus("saved");
-      router.push('/drafts')
+      router.push("/drafts");
     } catch {
       setDraftStatus("error");
     }
   };
 
- const handleSendDraft = async () => {
-  setSending(true);
+  const handleSendDraft = async () => {
+    if (!hasValidRecipient) {
+      setDraftStatus("error");
+      return;
+    }
 
-  try {
-    const headers = authHeader();
-    if (!headers) throw new Error();
+    setSending(true);
+    try {
+      const recipients = getCommittedRecipients();
+      const formData = buildDraftFormData(recipients);
 
-    const formData = new FormData();
-    formData.append("subject", draftFields.subject || "");
-    formData.append("body", draftFields.body || "");
-    formData.append("to", parseRecipientList(draftRecipients.to));
-    formData.append("cc", parseRecipientList(draftRecipients.cc));
-    formData.append("bcc", parseRecipientList(draftRecipients.bcc));
-    draftAttachments.forEach((file) => formData.append("attachments", file));
+      const res = await authedFetch(`${API}/api/gmail/${id}/send_draft`, {
+        method: "POST",
+        body: formData,
+      });
 
-    const res = await fetch(`${API}/api/gmail/${id}/send_draft`, {
-      method: "POST",
-      headers,
-      body: formData,
-    });
+      if (!res) return;
+      if (!res.ok) throw new Error();
 
-    if (!res.ok) throw new Error();
-
-    router.push("/drafts");
-  } catch {
-    setDraftStatus("error");
-  } finally {
-    setSending(false);
-  }
-};
+      router.push("/drafts");
+    } catch {
+      setDraftStatus("error");
+    } finally {
+      setSending(false);
+    }
+  };
 
   const handleDiscardDraft = async () => {
-    const headers = authHeader();
-    if (!headers) return;
-
     try {
-      await fetch(`${API}/api/gmail/draft/${id}`, {
-        method: "DELETE",
-        headers,
-      });
+      await authedFetch(`${API}/api/gmail/draft/${id}`, { method: "DELETE" });
     } catch {
       // ignore — still navigate away
     } finally {
@@ -438,6 +553,81 @@ export default function EmailPage() {
     setDraftAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // ---- Reply / Reply-all / Forward ---------------------------------------
+
+  const openReplyMode = (mode) => {
+    setReplyError(null);
+    if (replyMode === mode) {
+      setReplyMode(null);
+      return;
+    }
+    setReplyMode(mode);
+    setReplyBody("");
+    setForwardTo("");
+  };
+
+  const handleSendReply = async () => {
+    if (!email) return;
+
+    if (replyMode === "forward") {
+      const recipients = forwardTo
+        .split(",")
+        .map((r) => normalizeRecipient(r))
+        .filter(Boolean);
+
+      if (!recipients.length || !recipients.every(isValidEmail)) {
+        setReplyError("Enter at least one valid recipient to forward to.");
+        return;
+      }
+    }
+
+    if (!replyBody.trim()) {
+      setReplyError("Message can't be empty.");
+      return;
+    }
+
+    setReplySending(true);
+    setReplyError(null);
+
+    try {
+      const isForward = replyMode === "forward";
+      const url = isForward
+        ? `${API}/api/gmail/email/${id}/forward`
+        : `${API}/api/gmail/email/${id}/reply`;
+
+      const payload = isForward
+        ? {
+            to: forwardTo
+              .split(",")
+              .map((r) => normalizeRecipient(r))
+              .filter(Boolean),
+            body: replyBody,
+          }
+        : {
+            body: replyBody,
+            reply_all: replyMode === "replyAll",
+          };
+
+      const res = await authedFetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res) return;
+      if (!res.ok) throw new Error();
+
+      setReplyMode(null);
+      setReplyBody("");
+      setForwardTo("");
+      fetchEmail(); // refresh thread with the new message
+    } catch {
+      setReplyError("Couldn't send. Please try again.");
+    } finally {
+      setReplySending(false);
+    }
+  };
+
   // ---- AI chat -------------------------------------------------------------
 
   const sendAiMessage = async (override) => {
@@ -449,22 +639,17 @@ export default function EmailPage() {
     setAiInput("");
     setAiSending(true);
 
-    const headers = authHeader();
-    if (!headers) {
-      setAiSending(false);
-      return;
-    }
-
     try {
-      const res = await fetch(`${API}/api/ai/chat`, {
+      const res = await authedFetch(`${API}/api/ai/chat`, {
         method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email_id: id,
           message: text,
           history: aiMessages.map((m) => ({ role: m.role, text: m.text })),
         }),
       });
+      if (!res) return;
       if (!res.ok) throw new Error();
       const data = await res.json();
       setAiMessages((prev) => [
@@ -489,16 +674,6 @@ export default function EmailPage() {
       setAiSending(false);
     }
   };
-
-  const allRecipients = useMemo(() => {
-    if (!email) return [];
-    return [
-      ...(email.to || []),
-      ...(email.cc || []),
-      ...(email.bcc || []),
-      ...(email.reply_to || []),
-    ];
-  }, [email]);
 
   const recipientSummary = useMemo(() => {
     if (!email?.to?.length) return "";
@@ -543,7 +718,30 @@ export default function EmailPage() {
   }
 
   // -------------------------------------------------------------------
-  // Error state
+  // Not found (404) state
+  // -------------------------------------------------------------------
+  if (notFound) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center bg-[#f6f8fc]">
+        <SearchX size={40} className="text-[#5f6368]" />
+        <h2 className="mt-4 text-lg font-semibold text-[#202124]">
+          This email couldn't be found
+        </h2>
+        <p className="mt-1 text-sm text-[#5f6368]">
+          It may have been deleted or moved.
+        </p>
+        <button
+          onClick={() => router.push("/inbox")}
+          className="mt-5 rounded-full bg-[#1a73e8] px-4 py-2 text-sm font-medium text-white hover:bg-[#1765cc]"
+        >
+          Back to inbox
+        </button>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------
+  // Generic error state
   // -------------------------------------------------------------------
   if (error || !email) {
     return (
@@ -576,9 +774,6 @@ export default function EmailPage() {
 
   return (
     <div className="flex h-full bg-white">
-      {/* ------------------------------------------------------------ */}
-      {/* Main column                                                   */}
-      {/* ------------------------------------------------------------ */}
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
         {/* Toolbar */}
         <div className="flex shrink-0 items-center gap-1 border-b border-[#e8eaed] bg-[#f8f9fa] px-3 py-2">
@@ -595,10 +790,20 @@ export default function EmailPage() {
           {/* Folder-specific primary actions */}
           {isTrash && (
             <>
-              <button title="Move to inbox" className="rounded-full p-2 hover:bg-[#e8eaed]">
+              <button
+                onClick={untrashEmail}
+                disabled={actionLoading === "untrash"}
+                title="Move to inbox"
+                className="rounded-full p-2 hover:bg-[#e8eaed] disabled:opacity-50"
+              >
                 <RotateCcw size={18} className="text-[#5f6368]" />
               </button>
-              <button title="Delete forever" className="rounded-full p-2 hover:bg-[#e8eaed]">
+              <button
+                onClick={deleteForever}
+                disabled={actionLoading === "delete-forever"}
+                title="Delete forever"
+                className="rounded-full p-2 hover:bg-[#e8eaed] disabled:opacity-50"
+              >
                 <Trash2 size={18} className="text-[#d93025]" />
               </button>
             </>
@@ -606,10 +811,20 @@ export default function EmailPage() {
 
           {isSpam && (
             <>
-              <button title="Not spam" className="rounded-full p-2 hover:bg-[#e8eaed]">
+              <button
+                onClick={markNotSpam}
+                disabled={actionLoading === "not-spam"}
+                title="Not spam"
+                className="rounded-full p-2 hover:bg-[#e8eaed] disabled:opacity-50"
+              >
                 <ShieldOff size={18} className="text-[#5f6368]" />
               </button>
-              <button title="Delete forever" className="rounded-full p-2 hover:bg-[#e8eaed]">
+              <button
+                onClick={deleteForever}
+                disabled={actionLoading === "delete-forever"}
+                title="Delete forever"
+                className="rounded-full p-2 hover:bg-[#e8eaed] disabled:opacity-50"
+              >
                 <Trash2 size={18} className="text-[#d93025]" />
               </button>
             </>
@@ -627,50 +842,63 @@ export default function EmailPage() {
 
           {isSent && (
             <>
-              <button title="Archive" className="rounded-full p-2 hover:bg-[#e8eaed]">
+              <button
+                onClick={archiveEmail}
+                disabled={actionLoading === "archive"}
+                title="Archive"
+                className="rounded-full p-2 hover:bg-[#e8eaed] disabled:opacity-50"
+              >
                 <Archive size={18} className="text-[#5f6368]" />
               </button>
-              <button title="Delete" className="rounded-full p-2 hover:bg-[#e8eaed]">
+              <button
+                onClick={trashEmail}
+                disabled={actionLoading === "trash"}
+                title="Delete"
+                className="rounded-full p-2 hover:bg-[#e8eaed] disabled:opacity-50"
+              >
                 <Trash2 size={18} className="text-[#5f6368]" />
-              </button>
-              <div className="mx-1 h-6 w-px bg-[#dadce0]" />
-              <button title="Snooze" className="rounded-full p-2 hover:bg-[#e8eaed]">
-                <Clock size={18} className="text-[#5f6368]" />
-              </button>
-              <button title="Labels" className="rounded-full p-2 hover:bg-[#e8eaed]">
-                <Tag size={18} className="text-[#5f6368]" />
               </button>
             </>
           )}
 
           {isInbox && (
             <>
-              <button title="Archive" className="rounded-full p-2 hover:bg-[#e8eaed]">
+              <button
+                onClick={archiveEmail}
+                disabled={actionLoading === "archive"}
+                title="Archive"
+                className="rounded-full p-2 hover:bg-[#e8eaed] disabled:opacity-50"
+              >
                 <Archive size={18} className="text-[#5f6368]" />
               </button>
-              <button title="Report spam" className="rounded-full p-2 hover:bg-[#e8eaed]">
+              <button
+                onClick={markSpam}
+                disabled={actionLoading === "spam"}
+                title="Report spam"
+                className="rounded-full p-2 hover:bg-[#e8eaed] disabled:opacity-50"
+              >
                 <AlertOctagon size={18} className="text-[#5f6368]" />
               </button>
-              <button title="Delete" className="rounded-full p-2 hover:bg-[#e8eaed]">
+              <button
+                onClick={trashEmail}
+                disabled={actionLoading === "trash"}
+                title="Delete"
+                className="rounded-full p-2 hover:bg-[#e8eaed] disabled:opacity-50"
+              >
                 <Trash2 size={18} className="text-[#5f6368]" />
               </button>
               <div className="mx-1 h-6 w-px bg-[#dadce0]" />
               <button
                 title={unread ? "Mark as read" : "Mark as unread"}
-                onClick={() => setUnread((v) => !v)}
-                className="rounded-full p-2 hover:bg-[#e8eaed]"
+                onClick={toggleRead}
+                disabled={actionLoading === "read"}
+                className="rounded-full p-2 hover:bg-[#e8eaed] disabled:opacity-50"
               >
                 {unread ? (
                   <Mail size={18} className="text-[#5f6368]" />
                 ) : (
                   <MailOpen size={18} className="text-[#5f6368]" />
                 )}
-              </button>
-              <button title="Snooze" className="rounded-full p-2 hover:bg-[#e8eaed]">
-                <Clock size={18} className="text-[#5f6368]" />
-              </button>
-              <button title="Labels" className="rounded-full p-2 hover:bg-[#e8eaed]">
-                <Tag size={18} className="text-[#5f6368]" />
               </button>
             </>
           )}
@@ -684,12 +912,6 @@ export default function EmailPage() {
               className="rounded-full p-2 hover:bg-[#e8eaed]"
             >
               <Printer size={18} className="text-[#5f6368]" />
-            </button>
-            <button
-              title="Open in new window"
-              className="rounded-full p-2 hover:bg-[#e8eaed]"
-            >
-              <ExternalLink size={18} className="text-[#5f6368]" />
             </button>
             <button title="More" className="rounded-full p-2 hover:bg-[#e8eaed]">
               <MoreVertical size={18} className="text-[#5f6368]" />
@@ -812,9 +1034,10 @@ export default function EmailPage() {
                   </span>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => setStarred((v) => !v)}
+                      onClick={toggleStar}
+                      disabled={actionLoading === "star"}
                       title={starred ? "Unstar" : "Star"}
-                      className="rounded-full p-1.5 hover:bg-[#f1f3f4]"
+                      className="rounded-full p-1.5 hover:bg-[#f1f3f4] disabled:opacity-50"
                     >
                       <Star
                         size={18}
@@ -849,7 +1072,11 @@ export default function EmailPage() {
                           key={`${recipient}-${index}`}
                           type="button"
                           onClick={() => removeRecipientChip("to", index)}
-                          className="flex items-center gap-1 rounded-full border border-[#dadce0] bg-white px-2.5 py-1 text-[12px] text-[#202124]"
+                          className={`flex items-center gap-1 rounded-full border bg-white px-2.5 py-1 text-[12px] ${
+                            isValidEmail(recipient)
+                              ? "border-[#dadce0] text-[#202124]"
+                              : "border-[#d93025] text-[#d93025]"
+                          }`}
                         >
                           {recipient}
                           <X size={12} />
@@ -977,7 +1204,12 @@ export default function EmailPage() {
                   {draftStatus === "saved" && (
                     <span className="text-[12px] text-[#188038]">Saved</span>
                   )}
-                  {draftStatus === "error" && (
+                  {draftStatus === "error" && !hasValidRecipient && (
+                    <span className="text-[12px] text-[#d93025]">
+                      Add a valid recipient before sending
+                    </span>
+                  )}
+                  {draftStatus === "error" && hasValidRecipient && (
                     <span className="text-[12px] text-[#d93025]">
                       Something went wrong
                     </span>
@@ -1121,13 +1353,16 @@ export default function EmailPage() {
                             {formatBytes(att.size)}
                           </div>
                         </div>
-                        <button
+                      <a
+                          href={att.download_url || `${API}/api/gmail/email/${id}/attachments/${att.attachment_id}`}
+                          target="_blank"
+                          rel="noreferrer"
                           title="Download"
                           className="flex items-center justify-center gap-1 self-start rounded-full border border-[#dadce0] px-2.5 py-1 text-[11px] text-[#5f6368] opacity-0 transition group-hover:opacity-100 hover:bg-[#f1f3f4]"
                         >
                           <Download size={12} />
                           Download
-                        </button>
+                        </a>
                       </div>
                     );
                   })}
@@ -1161,12 +1396,16 @@ export default function EmailPage() {
                     const preview = getMessagePreview(threadMessage);
 
                     return (
-                      <div
+                      <button
                         key={threadMessage.id}
-                        className={`rounded-xl border p-4 ${
+                        type="button"
+                        onClick={() => {
+                          if (!isCurrent) router.push(`/email/${threadMessage.id}`);
+                        }}
+                        className={`w-full rounded-xl border p-4 text-left transition ${
                           isCurrent
-                            ? "border-[#1a73e8] bg-[#f8fbff]"
-                            : "border-[#e8eaed] bg-[#fcfcfd]"
+                            ? "cursor-default border-[#1a73e8] bg-[#f8fbff]"
+                            : "border-[#e8eaed] bg-[#fcfcfd] hover:border-[#1a73e8] hover:bg-[#f8fbff]"
                         }`}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1188,7 +1427,7 @@ export default function EmailPage() {
                         <div className="mt-2 text-[13px] leading-6 text-[#5f6368]">
                           {preview || "(no content)"}
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -1199,18 +1438,21 @@ export default function EmailPage() {
             {isDraft ? (
               <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-[#e8eaed] pt-5">
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleSendDraft}
-                    disabled={sending}
-                    className="flex items-center gap-2 rounded-full bg-[#1a73e8] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#1765cc] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {sending ? (
-                      <Loader2 size={15} className="animate-spin" />
-                    ) : (
-                      <SendHorizontal size={15} />
-                    )}
-                    {sending ? "Sending…" : "Send"}
-                  </button>
+                  {/* Send button only rendered when there's a valid recipient */}
+                  {hasValidRecipient && (
+                    <button
+                      onClick={handleSendDraft}
+                      disabled={sending}
+                      className="flex items-center gap-2 rounded-full bg-[#1a73e8] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#1765cc] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {sending ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : (
+                        <SendHorizontal size={15} />
+                      )}
+                      {sending ? "Sending…" : "Send"}
+                    </button>
+                  )}
                   <button
                     onClick={handleSaveDraft}
                     className="flex items-center gap-2 rounded-full border border-[#dadce0] px-4 py-2.5 text-sm font-medium text-[#3c4043] transition hover:bg-[#f1f3f4]"
@@ -1229,9 +1471,7 @@ export default function EmailPage() {
               <div className="mt-8 border-t border-[#e8eaed] pt-5">
                 <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={() =>
-                      setReplyMode(replyMode === "reply" ? null : "reply")
-                    }
+                    onClick={() => openReplyMode("reply")}
                     className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
                       replyMode === "reply"
                         ? "border-[#1a73e8] bg-[#e8f0fe] text-[#1a73e8]"
@@ -1242,9 +1482,7 @@ export default function EmailPage() {
                     Reply
                   </button>
                   <button
-                    onClick={() =>
-                      setReplyMode(replyMode === "replyAll" ? null : "replyAll")
-                    }
+                    onClick={() => openReplyMode("replyAll")}
                     className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
                       replyMode === "replyAll"
                         ? "border-[#1a73e8] bg-[#e8f0fe] text-[#1a73e8]"
@@ -1255,9 +1493,7 @@ export default function EmailPage() {
                     Reply all
                   </button>
                   <button
-                    onClick={() =>
-                      setReplyMode(replyMode === "forward" ? null : "forward")
-                    }
+                    onClick={() => openReplyMode("forward")}
                     className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
                       replyMode === "forward"
                         ? "border-[#1a73e8] bg-[#e8f0fe] text-[#1a73e8]"
@@ -1285,14 +1521,38 @@ export default function EmailPage() {
                         <X size={15} className="text-[#5f6368]" />
                       </button>
                     </div>
+
+                    {replyMode === "forward" && (
+                      <div className="border-b border-[#e8eaed] px-4 py-2.5">
+                        <input
+                          value={forwardTo}
+                          onChange={(e) => setForwardTo(e.target.value)}
+                          placeholder="Recipients, separated by commas"
+                          className="w-full bg-transparent text-[13px] text-[#202124] outline-none placeholder:text-[#9aa0a6]"
+                        />
+                      </div>
+                    )}
+
                     <textarea
+                      value={replyBody}
+                      onChange={(e) => setReplyBody(e.target.value)}
                       rows={5}
                       placeholder="Write your message..."
-                      className="w-full resize-none rounded-b-2xl px-4 py-3 text-[14px] text-[#202124] outline-none placeholder:text-[#9aa0a6]"
+                      className="w-full resize-none px-4 py-3 text-[14px] text-[#202124] outline-none placeholder:text-[#9aa0a6]"
                     />
-                    <div className="flex items-center justify-between border-t border-[#e8eaed] px-4 py-2.5">
-                      <button className="rounded-full bg-[#1a73e8] px-5 py-2 text-sm font-medium text-white hover:bg-[#1765cc]">
-                        Send
+
+                    {replyError && (
+                      <div className="px-4 pb-1 text-[12px] text-[#d93025]">{replyError}</div>
+                    )}
+
+                    <div className="flex items-center justify-between rounded-b-2xl border-t border-[#e8eaed] px-4 py-2.5">
+                      <button
+                        onClick={handleSendReply}
+                        disabled={replySending}
+                        className="flex items-center gap-2 rounded-full bg-[#1a73e8] px-5 py-2 text-sm font-medium text-white hover:bg-[#1765cc] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {replySending && <Loader2 size={14} className="animate-spin" />}
+                        {replySending ? "Sending…" : "Send"}
                       </button>
                       <button
                         onClick={() => setReplyMode(null)}
@@ -1307,7 +1567,7 @@ export default function EmailPage() {
             )}
           </div>
         </div>
-      </div>
+
 
       <AgentAssistant
         page="email"
@@ -1451,5 +1711,6 @@ export default function EmailPage() {
         </div>
       )}
     </div>
-  );
+    </div>)
+
 }
