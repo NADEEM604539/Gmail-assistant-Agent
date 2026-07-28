@@ -3,6 +3,7 @@ import requests
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import base64
+from types import SimpleNamespace  # add to imports at top
 from bs4 import BeautifulSoup
 from email.utils import parseaddr
 from email.utils import getaddresses
@@ -407,20 +408,18 @@ class GmailService:
             "success": True
         }
 
-
-    def send_updated_draft(self, message_id: str, draft:DraftPayload):
-        """
-        Given a Gmail *message_id* (not draft_id) and updated draft content,
-        resolves the underlying draft, pushes the new content to it, and
-        immediately sends it.
-        """
+    def send_updated_draft(self, message_id: str, draft: DraftPayload):
         draft_id = self.get_draft_id(message_id)
 
         if not draft_id:
             raise ValueError(f"No draft found for message_id={message_id}")
 
-        updated = self.update_draft(draft_id, draft)
+        # Preserve previously attached files if the frontend didn't
+        # supply new ones for this request.
+        if not draft.attachments:
+            draft.attachments = self.get_message_attachments(message_id)
 
+        updated = self.update_draft(draft_id, draft)
         result = self.send_draft(updated["draft_id"])
 
         return {
@@ -428,3 +427,44 @@ class GmailService:
             "message_id": result.get("id"),
             "thread_id": result.get("threadId"),
         }
+
+    def get_message_attachments(self, message_id: str):
+        """
+        Fetches attachment content for an existing message so it can be
+    preserved when the draft's raw MIME body is rebuilt (e.g. on Send,
+    when the frontend didn't re-upload files already saved to the draft).
+    """
+        message = self.get_message(message_id)
+        payload = message.get("payload", {})
+        attachments = []
+
+        def walk(parts):
+            for part in parts:
+                filename = part.get("filename")
+                body = part.get("body", {})
+                attachment_id = body.get("attachmentId")
+
+                if filename and attachment_id:
+                    attachment_data = (
+                        self.service.users()
+                        .messages()
+                        .attachments()
+                        .get(userId="me", messageId=message_id, id=attachment_id)
+                        .execute()
+                    )
+                    data = attachment_data.get("data")
+                    if data:
+                        content = base64.urlsafe_b64decode(data + "==")
+                        attachments.append(
+                            SimpleNamespace(
+                                filename=filename,
+                                mime_type=part.get("mimeType", "application/octet-stream"),
+                                content=content,
+                            )
+                        )
+
+                if "parts" in part:
+                    walk(part["parts"])
+
+        walk(payload.get("parts", []))
+        return attachments

@@ -11,7 +11,7 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
 
 
-def get_Sent(user_id : int, max_results=100):
+def get_Sent(user_id : int, max_results=10):
     db = SessionLocal()
     query = text("""
     SELECT refresh_token FROM gmail_accounts
@@ -49,3 +49,6 @@ def draft_Sent(user_id : int, message_id:str, draft:DraftPayload):
     messages = gmail.send_updated_draft(message_id=message_id, draft=draft)
     db.close()
     return messages
+
+
+
