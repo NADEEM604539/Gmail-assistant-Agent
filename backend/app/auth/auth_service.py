@@ -82,7 +82,7 @@ def registerUser(user, refresh_token, db):
     insert_query = text("""
     INSERT INTO users (google_id, name, email, profile_picture)
     VALUES (:google_id, :name, :email, :profile_picture)
-""")
+    """)
     db.execute(insert_query, {
         "google_id": user["id"],
         "name": user["name"],
