@@ -5,10 +5,10 @@ from app.auth.DTO import GoogleLoginRequest
 from app.auth.jwt.service import get_current_user
 from app.chatbot.agent.objects import DraftEmail, EmailAttachment, EmailRecipient
 from app.gmail.gmail import get_5_emails, getEmail
-from app.gmail.inbox_service import get_Inbox, deleteBunch, trashBunch
+from app.gmail.inbox_service import get_Inbox, deleteBunch, trashBunch, star_status, read_status, archive, untrash, markspam, mark_not_spam, delete, trashOne
 from app.gmail.sent_service import get_Sent, draft_Sent
 from app.gmail.draft_service import get_Draft
-from app.gmail.DTO import DraftRequest, Attachment, DraftPayload, MessageIdsRequest
+from app.gmail.DTO import DraftRequest, Attachment, DraftPayload, MessageIdsRequest, StarRequest, ReadRequest
 from app.gmail.draft_service import genAI_draft, gen_draft, update_draft, send_draft, delete_draft
 from app.gmail.reply_service import create_reply_draft, forward_email, reply_to_email , update_reply_draft
 
@@ -313,20 +313,124 @@ async def updateReplyDraft(
         attachments=files,
     )
 
+# --- Request Schemas ---
+
+
+
+
+# --- Email Item Endpoints ---
+
+@router.post("/email/{id}/star")
+async def toggle_star_endpoint(
+    id: str,
+    payload: StarRequest,
+    current_user=Depends(get_current_user)
+):
+    """Toggle star state for a specific email."""
+    result = star_status(
+        user_id=current_user["user_id"],
+        message_id=id,
+    )
+    return {"success": True, "starred": payload.starred, "details": result}
+
+
+@router.post("/email/{id}/read")
+async def toggle_read_endpoint(
+    id: str,
+    payload: ReadRequest,
+    current_user=Depends(get_current_user)
+):
+    """Toggle unread/read state for a specific email."""
+    result = read_status(
+        user_id=current_user["user_id"],
+        message_id=id,
+    )
+    return {"success": True, "unread": payload.unread, "details": result}
+
+
+@router.post("/email/{id}/archive")
+async def archive_email_endpoint(
+    id: str,
+    current_user=Depends(get_current_user)
+):
+    """Archive an email (remove from INBOX)."""
+    result = archive(user_id=current_user["user_id"], message_id=id)
+    return result
+
+
+@router.post("/email/{id}/trash")
+async def trash_email_endpoint(
+    id: str,
+    current_user=Depends(get_current_user)
+):
+    """Move a single email to Trash."""
+    result = trashOne(
+        user_id=current_user["user_id"],
+        message_id=id
+    )
+    return result
+
+
+@router.post("/email/{id}/untrash")
+async def untrash_email_endpoint(
+    id: str,
+    current_user=Depends(get_current_user)
+):
+    """Restore a single email from Trash."""
+    result = untrash(user_id=current_user["user_id"], message_id=id)
+    return {"success": True, "message_id": id, "details": result}
+
+
+@router.delete("/email/{id}")
+async def delete_email_forever_endpoint(
+    id: str,
+    current_user=Depends(get_current_user)
+):
+    """Permanently delete a single email."""
+    result = delete(
+        user_id=current_user["user_id"],
+        message_id=id
+    )
+    return result
+
+
+@router.post("/email/{id}/spam")
+async def mark_spam_endpoint(
+    id: str,
+    current_user=Depends(get_current_user)
+):
+    """Mark an email as spam."""
+    result = markspam(user_id=current_user["user_id"], message_id=id)
+    return {"success": True, "message_id": id, "details": result}
+
+
+@router.post("/email/{id}/not-spam")
+async def mark_not_spam_endpoint(
+    id: str,
+    current_user=Depends(get_current_user)
+):
+    """Mark an email as not spam (remove from SPAM folder)."""
+    result = mark_not_spam(user_id=current_user["user_id"], message_id=id)
+    return {"success": True, "message_id": id, "details": result}
+
+
+# --- Bulk Operation Endpoints ---
 
 @router.post("/messages/trash")
 async def trash_messages(
     request: MessageIdsRequest,
     current_user=Depends(get_current_user),
 ):
-    
+    """Bulk trash multiple messages."""
     trash_status = trashBunch(current_user["user_id"], request=request)
     return trash_status
+
 
 @router.post("/messages/delete")
 async def delete_messages(
     request: MessageIdsRequest,
     current_user=Depends(get_current_user),
 ):
+    """Bulk permanently delete multiple messages."""
     delete_status = deleteBunch(current_user["user_id"], request=request)
     return delete_status
