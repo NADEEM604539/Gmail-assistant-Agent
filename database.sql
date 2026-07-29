@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS `gmail_accounts` (
   `email_address` VARCHAR(255) NOT NULL,
   `provider` VARCHAR(128) NOT NULL DEFAULT 'google',
   `is_primary` BOOLEAN NOT NULL DEFAULT FALSE,
+  `status` ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
   `connected_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `refresh_token` TEXT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -74,14 +75,16 @@ CREATE TABLE gmail_syncs (
         ON DELETE CASCADE
 );
 
-
+-- --------------------------------------------------
+-- Table: emails
+-- --------------------------------------------------
 CREATE TABLE IF NOT EXISTS `emails` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `user_id` BIGINT UNSIGNED NOT NULL,
     `gmail_message_id` VARCHAR(255) NOT NULL,
     `gmail_thread_id` VARCHAR(255) NOT NULL,
-    `gmail_draft_id` VARCHAR(255) NULL,
     `history_id` BIGINT UNSIGNED NOT NULL,
+
     `folder` ENUM(
         'inbox',
         'sent',
@@ -95,36 +98,43 @@ CREATE TABLE IF NOT EXISTS `emails` (
         'social',
         'updates'
     ) NOT NULL DEFAULT 'inbox',
+
     `from_name` VARCHAR(255) NULL,
     `from_email` VARCHAR(255) NULL,
     `to_name` VARCHAR(255) NULL,
     `to_email` VARCHAR(255) NULL,
+
     `subject` VARCHAR(512) NOT NULL,
     `body` LONGTEXT NULL,
     `preview` TEXT NULL,
     `label` VARCHAR(255) NULL,
     `category` VARCHAR(100) NULL,
+
     `status` ENUM(
         'read',
         'unread',
         'draft',
         'sent',
         'deleted'
-    ) DEFAULT 'unread',
+    ) NOT NULL DEFAULT 'unread',
+
     `priority` ENUM(
         'high',
         'medium',
         'low'
-    ) DEFAULT 'medium',
-    `has_attachment` BOOLEAN DEFAULT FALSE,
-    `starred` BOOLEAN DEFAULT FALSE,
-    `is_important` BOOLEAN DEFAULT FALSE,
+    ) NOT NULL DEFAULT 'medium',
+
+    `has_attachment` BOOLEAN NOT NULL DEFAULT FALSE,
+    `starred` BOOLEAN NOT NULL DEFAULT FALSE,
+    `is_important` BOOLEAN NOT NULL DEFAULT FALSE,
+
     `ai_summary` TEXT NULL,
     `received_at` DATETIME NULL,
     `sent_at` DATETIME NULL,
-    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP
-        ON UPDATE CURRENT_TIMESTAMP,
+
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
     PRIMARY KEY (`id`),
     UNIQUE KEY `uniq_gmail_message` (`gmail_message_id`),
     KEY `idx_user` (`user_id`),
@@ -132,53 +142,80 @@ CREATE TABLE IF NOT EXISTS `emails` (
     KEY `idx_history` (`history_id`),
     KEY `idx_folder` (`folder`),
     KEY `idx_status` (`status`),
+
     CONSTRAINT `fk_emails_user`
         FOREIGN KEY (`user_id`)
         REFERENCES `users` (`id`)
         ON DELETE CASCADE
-) ENGINE=InnoDB
-DEFAULT CHARSET=utf8mb4
-COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- --------------------------------------------------
+-- Table: email_recipients
+-- --------------------------------------------------
 CREATE TABLE IF NOT EXISTS `email_recipients` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `email_id` BIGINT UNSIGNED NOT NULL,
-  `recipient_type` ENUM('to','cc','bcc') NOT NULL,
-  `name` VARCHAR(255) NULL,
-  `email` VARCHAR(255) NOT NULL,
-  `recipient_order` INT UNSIGNED NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  KEY `idx_email_recipients_email_id` (`email_id`),
-  CONSTRAINT `fk_email_recipients_email` FOREIGN KEY (`email_id`) REFERENCES `emails` (`id`) ON DELETE CASCADE
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `email_id` BIGINT UNSIGNED NOT NULL,
+    `recipient_type` ENUM('to', 'cc', 'bcc') NOT NULL,
+    `name` VARCHAR(255) NULL,
+    `email` VARCHAR(255) NOT NULL,
+    `recipient_order` INT UNSIGNED NOT NULL DEFAULT 0,
+
+    PRIMARY KEY (`id`),
+    KEY `idx_email_recipients_email_id` (`email_id`),
+
+    CONSTRAINT `fk_email_recipients_email`
+        FOREIGN KEY (`email_id`)
+        REFERENCES `emails` (`id`)
+        ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- --------------------------------------------------
+-- Table: email_labels
+-- --------------------------------------------------
 CREATE TABLE IF NOT EXISTS `email_labels` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `user_id` BIGINT UNSIGNED NOT NULL,
-  `name` VARCHAR(128) NOT NULL,
-  `color` VARCHAR(32) NULL,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_email_labels_user_name` (`user_id`,`name`),
-  KEY `idx_email_labels_user_id` (`user_id`),
-  CONSTRAINT `fk_email_labels_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` BIGINT UNSIGNED NOT NULL,
+    `name` VARCHAR(128) NOT NULL,
+    `color` VARCHAR(32) NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uniq_email_labels_user_name` (`user_id`, `name`),
+    KEY `idx_email_labels_user_id` (`user_id`),
+
+    CONSTRAINT `fk_email_labels_user`
+        FOREIGN KEY (`user_id`)
+        REFERENCES `users` (`id`)
+        ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- --------------------------------------------------
+-- Table: email_attachments
+-- --------------------------------------------------
 CREATE TABLE IF NOT EXISTS `email_attachments` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `email_id` BIGINT UNSIGNED NOT NULL,
-  `content_id` VARCHAR(255) NULL,
-  `filename` VARCHAR(255) NOT NULL,
-  `mime_type` VARCHAR(128) NULL,
-  `size_bytes` INT UNSIGNED NULL,
-  `storage_url` VARCHAR(1024) NULL,
-  `download_url` VARCHAR(1024) NULL,
-  `checksum` VARCHAR(128) NULL,
-  `is_inline` BOOLEAN NOT NULL DEFAULT FALSE,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_email_attachments_email_id` (`email_id`),
-  CONSTRAINT `fk_email_attachments_email` FOREIGN KEY (`email_id`) REFERENCES `emails` (`id`) ON DELETE CASCADE
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `email_id` BIGINT UNSIGNED NOT NULL,
+    `attachment_id` VARCHAR(255) NULL,
+    `content_id` VARCHAR(255) NULL,
+    `filename` VARCHAR(255) NOT NULL,
+    `mime_type` VARCHAR(128) NULL,
+    `size_bytes` INT UNSIGNED NULL,
+    `storage_url` VARCHAR(1024) NULL,
+    `download_url` VARCHAR(1024) NULL,
+    `checksum` VARCHAR(128) NULL,
+    `is_inline` BOOLEAN NOT NULL DEFAULT FALSE,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (`id`),
+    KEY `idx_email_attachments_email_id` (`email_id`),
+
+    CONSTRAINT `fk_email_attachments_email`
+        FOREIGN KEY (`email_id`)
+        REFERENCES `emails` (`id`)
+        ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `notifications` (
@@ -305,5 +342,66 @@ CREATE TABLE IF NOT EXISTS `chat_messages` (
   KEY `idx_chat_messages_thread_id` (`thread_id`),
   CONSTRAINT `fk_chat_messages_thread` FOREIGN KEY (`thread_id`) REFERENCES `chat_threads` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS `user_preferences` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `preference_name` VARCHAR(255) NOT NULL,
+  `preference_value` TEXT NOT NULL,
+  `enabled` BOOLEAN NOT NULL DEFAULT TRUE,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_user_preference` (`user_id`, `preference_name`),
+  KEY `idx_user_preferences_user_id` (`user_id`),
+  KEY `idx_user_preferences_enabled` (`user_id`, `enabled`),
+  CONSTRAINT `fk_user_preferences_user` 
+    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ai_email_actions` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id` BIGINT UNSIGNED NOT NULL,
+    `email_id` BIGINT UNSIGNED NULL,
+    `action_type` ENUM(
+        'draft_created',
+        'draft_updated',
+        'reply_generated',
+        'email_sent',
+        'email_summarized',
+        'email_classified',
+        'email_labeled',
+        'priority_detected',
+        'followup_created'
+    ) NOT NULL,
+    `model_name` VARCHAR(100) NULL,
+    `status` ENUM(
+        'pending',
+        'completed',
+        'failed'
+    ) DEFAULT 'completed',
+    `input_text` LONGTEXT NULL,
+    `output_text` LONGTEXT NULL,
+    `error_message` TEXT NULL,
+    `metadata` JSON NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_user_id` (`user_id`),
+    KEY `idx_email_id` (`email_id`),
+    KEY `idx_action_type` (`action_type`),
+    KEY `idx_created_at` (`created_at`),
+    CONSTRAINT `fk_ai_action_user`
+        FOREIGN KEY (`user_id`)
+        REFERENCES `users` (`id`)
+        ON DELETE CASCADE,
+    CONSTRAINT `fk_ai_action_email`
+        FOREIGN KEY (`email_id`)
+        REFERENCES `emails` (`id`)
+        ON DELETE SET NULL
+) ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;
