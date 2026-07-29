@@ -18,6 +18,7 @@ import {
   Loader2,
   Inbox,
   RefreshCw,
+  X,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -67,6 +68,12 @@ export default function SentPage() {
   const [query, setQuery] = useState('')
   const [showAI, setShowAI] = useState(true)
   const [activeId, setActiveId] = useState(null)
+
+  // Deletion States
+  const [deletingIds, setDeletingIds] = useState(new Set())
+  const [pendingDeleteIds, setPendingDeleteIds] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const router = useRouter()
 
   const fetchSent = async () => {
@@ -144,16 +151,62 @@ export default function SentPage() {
     })
   }
 
-  const removeMessages = (ids) => {
-    setMessages((prev) => prev.filter((message) => !ids.has(message.id)))
-    setSelected((prev) => {
-      const next = new Set(prev)
-      ids.forEach((id) => next.delete(id))
-      return next
-    })
-    if (activeId && ids.has(activeId)) {
-      const remaining = filtered.find((message) => !ids.has(message.id))
-      setActiveId(remaining?.id ?? null)
+  // Opens modal for confirmation
+  const promptDelete = (ids) => {
+    setPendingDeleteIds(ids)
+  }
+
+  // Handles actual deletion logic with animations & API sync
+  const confirmDelete = async () => {
+    if (!pendingDeleteIds || pendingDeleteIds.size === 0) return
+
+    const targetIds = new Set(pendingDeleteIds)
+    setIsDeleting(true)
+
+    // Trigger row exit animation
+    setDeletingIds(targetIds)
+
+    try {
+      const token = typeof window !== 'undefined' ? window.localStorage.getItem('access_token') : null
+
+      // API request to delete
+      if (token) {
+        await fetch(`${API_BASE}/api/gmail/messages/delete`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+           body: JSON.stringify({
+          message_ids: Array.from(selected),
+        }),
+        }).catch((e) => console.error('Delete API call warning:', e))
+      }
+
+      // Wait for exit animation to complete (300ms)
+      setTimeout(() => {
+        setMessages((prev) => prev.filter((message) => !targetIds.has(message.id)))
+        setSelected((prev) => {
+          const next = new Set(prev)
+          targetIds.forEach((id) => next.delete(id))
+          return next
+        })
+
+        if (activeId && targetIds.has(activeId)) {
+          const remaining = filtered.find((message) => !targetIds.has(message.id))
+          setActiveId(remaining?.id ?? null)
+        }
+
+        setDeletingIds(new Set())
+        setPendingDeleteIds(null)
+        setIsDeleting(false)
+        fetchSent()
+      }, 300)
+    } catch (err) {
+      console.error('Failed to delete messages', err)
+      setDeletingIds(new Set())
+      setPendingDeleteIds(null)
+      setIsDeleting(false)
     }
   }
 
@@ -197,7 +250,7 @@ export default function SentPage() {
                 {allSelected ? 'Deselect all' : 'Select all'}
               </button>
               <button
-                onClick={() => removeMessages(selected)}
+                onClick={() => promptDelete(selected)}
                 disabled={selected.size === 0}
                 className="inline-flex items-center gap-2 rounded-full border border-red-100 bg-white px-4 py-2 text-sm text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -281,10 +334,14 @@ export default function SentPage() {
                 filtered.map((message) => {
                   const isActive = message.id === activeMessage?.id
                   const badgeClass = LABEL_COLORS[message.category] || 'bg-slate-100 text-slate-600'
+                  const isBeingDeleted = deletingIds.has(message.id)
+
                   return (
                     <div
                       key={message.id}
-                      className={`group rounded-[26px] border p-4 transition cursor-pointer ${
+                      className={`group rounded-[26px] border p-4 transition-all duration-300 cursor-pointer ${
+                        isBeingDeleted ? 'opacity-0 scale-95 translate-x-4 max-h-0 overflow-hidden py-0 my-0 border-0' : ''
+                      } ${
                         isActive
                           ? 'border-indigo-300 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm'
                           : 'border-slate-100 bg-white hover:border-indigo-100 hover:bg-slate-50'
@@ -314,7 +371,7 @@ export default function SentPage() {
                           {initials(message.displayName, message.displayEmail)}
                         </div>
 
-                        <div className="min-w-0 flex-1" onClick={()=>router.push(`/email/${message.id}`)}>
+                        <div className="min-w-0 flex-1" onClick={() => router.push(`/email/${message.id}`)}>
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
                               <h2 className="text-[15px] font-semibold text-slate-900 truncate flex items-center gap-1.5">
@@ -344,7 +401,7 @@ export default function SentPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              removeMessages(new Set([message.id]))
+                              promptDelete(new Set([message.id]))
                             }}
                             className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 opacity-0 transition group-hover:opacity-100 hover:bg-red-100"
                           >
@@ -407,7 +464,7 @@ export default function SentPage() {
                       <ArrowRight size={16} /> Open full thread
                     </button>
                     <button
-                      onClick={() => removeMessages(new Set([activeMessage.id]))}
+                      onClick={() => promptDelete(new Set([activeMessage.id]))}
                       className="inline-flex items-center gap-2 rounded-full bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-100 transition"
                     >
                       <Trash2 size={16} /> Delete
@@ -424,6 +481,59 @@ export default function SentPage() {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      {pendingDeleteIds && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 transition-opacity animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl transition-all scale-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5 text-red-600 font-semibold text-lg">
+                <div className="p-2 bg-red-50 rounded-full">
+                  <Trash2 size={20} />
+                </div>
+                Confirm Deletion
+              </div>
+              <button
+                onClick={() => setPendingDeleteIds(null)}
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="py-4">
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Are you sure you want to delete {pendingDeleteIds.size === 1 ? 'this message' : `these ${pendingDeleteIds.size} messages`}? This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3">
+              <button
+                onClick={() => setPendingDeleteIds(null)}
+                disabled={isDeleting}
+                className="rounded-full border border-slate-200 px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="inline-flex items-center gap-2 rounded-full bg-red-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 transition disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <AgentAssistant
         page="sent"
         title="Sent Assistant"
