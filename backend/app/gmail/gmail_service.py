@@ -822,30 +822,215 @@ class GmailService:
             "thread_id": result["message"].get("threadId"),
         }
 
-    def trash_messages(self, message_ids: list[str]):
-        success = []
 
-        for message_id in message_ids:
-                self.service.users().messages().trash(
-                    userId="me",
-                    id=message_id
-                ).execute()
+    # ---------------------------------------------------------------------------
+    # Trash & Delete Operations
+    # ---------------------------------------------------------------------------
 
-                success.append(message_id)
-
-        return {
-            "success": True
-        }
-
-    
-    def delete_messages(self, message_ids: list[str]):
-        self.service.users().messages().batchDelete(
-                userId="me",
-                body={
-                    "ids": message_ids
-                }
-            ).execute()
-
-        return {
-                "success": True
+    def trash_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+        """Moves multiple messages to Trash via batchModify."""
+        return self.service.users().messages().batchModify(
+            userId="me",
+            body={
+                "ids": message_ids,
+                "addLabelIds": ["TRASH"]
             }
+        ).execute()
+
+    def trash_message(self, message_id: str) -> Dict[str, Any]:
+        """Moves a single message to Trash."""
+        return self.service.users().messages().trash(
+            userId="me",
+            id=message_id
+        ).execute()
+
+    def delete_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+        """Permanently deletes multiple messages."""
+        return self.service.users().messages().batchDelete(
+            userId="me",
+            body={"ids": message_ids}
+        ).execute()
+
+    def delete_message(self, message_id: str):
+        """Permanently deletes a single message (fixed body parameter error)."""
+        return self.service.users().messages().delete(
+            userId="me",
+            id=message_id
+        ).execute()
+
+    def untrash_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+        """Restores multiple messages from Trash by removing the TRASH label."""
+        return self.service.users().messages().batchModify(
+            userId="me",
+            body={
+                "ids": message_ids,
+                "removeLabelIds": ["TRASH"]
+            }
+        ).execute()
+
+    def untrash_message(self, message_id: str) -> Dict[str, Any]:
+        """Restores a single message from Trash back to its prior state."""
+        return self.service.users().messages().untrash(
+            userId="me",
+            id=message_id
+        ).execute()
+
+    # ---------------------------------------------------------------------------
+    # Label & Message State Operations (Read, Star, Archive)
+    # ---------------------------------------------------------------------------
+
+    def mark_bulk_as_read(self, message_ids: List[str]) -> Dict[str, Any]:
+        """Marks specified messages as read by removing the UNREAD label."""
+        return self.service.users().messages().batchModify(
+            userId="me",
+            body={
+                "ids": message_ids,
+                "removeLabelIds": ["UNREAD"]
+            }
+        ).execute()
+
+    def mark_as_read(self, message_id: str) -> Dict[str, Any]:
+        """Marks specified message as read by removing the UNREAD label."""
+        return self.service.users().messages().modify(
+            userId="me",
+            id=message_id,
+            body={"removeLabelIds": ["UNREAD"]}
+        ).execute()
+
+    def mark_bulk_as_unread(self, message_ids: List[str]) -> Dict[str, Any]:
+        """Marks specified messages as unread by adding the UNREAD label."""
+        return self.service.users().messages().batchModify(
+            userId="me",
+            body={
+                "ids": message_ids,
+                "addLabelIds": ["UNREAD"]
+            }
+        ).execute()
+
+    def mark_as_unread(self, message_id: str) -> Dict[str, Any]:
+        """Marks specified message as unread by adding the UNREAD label."""
+        return self.service.users().messages().modify(
+            userId="me",
+            id=message_id,
+            body={"addLabelIds": ["UNREAD"]}
+        ).execute()
+
+    def star_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+        """Stars specified messages by adding the STARRED label."""
+        return self.service.users().messages().batchModify(
+            userId="me",
+            body={
+                "ids": message_ids,
+                "addLabelIds": ["STARRED"]
+            }
+        ).execute()
+
+    def star_message(self, message_id: str) -> Dict[str, Any]:
+        """Stars specified message by adding the STARRED label."""
+        return self.service.users().messages().modify(
+            userId="me",
+            id=message_id,
+            body={"addLabelIds": ["STARRED"]}
+        ).execute()
+
+    def unstar_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+        """Unstars specified messages by removing the STARRED label."""
+        return self.service.users().messages().batchModify(
+            userId="me",
+            body={
+                "ids": message_ids,
+                "removeLabelIds": ["STARRED"]
+            }
+        ).execute()
+
+    def unstar_message(self, message_id: str) -> Dict[str, Any]:
+        """Unstars specified message by removing the STARRED label."""
+        return self.service.users().messages().modify(
+            userId="me",
+            id=message_id,
+            body={"removeLabelIds": ["STARRED"]}
+        ).execute()
+
+    def archive_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+        """Archives messages by removing them from the INBOX."""
+        return self.service.users().messages().batchModify(
+            userId="me",
+            body={
+                "ids": message_ids,
+                "removeLabelIds": ["INBOX"]
+            }
+        ).execute()
+
+    def archive_message(self, message_id: str) -> Dict[str, Any]:
+        """Archives message by removing it from the INBOX."""
+        return self.service.users().messages().modify(
+            userId="me",
+            id=message_id,
+            body={"removeLabelIds": ["INBOX"]}
+        ).execute()
+
+    def unarchive_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+        """Unarchives messages by restoring them back to the INBOX."""
+        return self.service.users().messages().batchModify(
+            userId="me",
+            body={
+                "ids": message_ids,
+                "addLabelIds": ["INBOX"]
+            }
+        ).execute()
+
+    def unarchive_message(self, message_id: str) -> Dict[str, Any]:
+        """Unarchives message by restoring it back to the INBOX."""
+        return self.service.users().messages().modify(
+            userId="me",
+            id=message_id,
+            body={"addLabelIds": ["INBOX"]}
+        ).execute()
+
+    # ---------------------------------------------------------------------------
+    # Spam / Not Spam Operations
+    # ---------------------------------------------------------------------------
+
+    def mark_as_spam(self, message_id: str) -> Dict[str, Any]:
+        """Moves a single message to SPAM and removes it from INBOX."""
+        return self.service.users().messages().modify(
+            userId="me",
+            id=message_id,
+            body={
+                "addLabelIds": ["SPAM"],
+                "removeLabelIds": ["INBOX"]
+            }
+        ).execute()
+
+    def mark_as_not_spam(self, message_id: str) -> Dict[str, Any]:
+        """Removes a single message from SPAM and restores it to INBOX."""
+        return self.service.users().messages().modify(
+            userId="me",
+            id=message_id,
+            body={
+                "addLabelIds": ["INBOX"],
+                "removeLabelIds": ["SPAM"]
+            }
+        ).execute()
+
+    def bulk_mark_as_spam(self, message_ids: List[str]) -> Dict[str, Any]:
+        """Moves multiple messages to SPAM in a single request."""
+        return self.service.users().messages().batchModify(
+            userId="me",
+            body={
+                "ids": message_ids,
+                "addLabelIds": ["SPAM"],
+                "removeLabelIds": ["INBOX"]
+            }
+        ).execute()
+
+    def bulk_mark_as_not_spam(self, message_ids: List[str]) -> Dict[str, Any]:
+        """Removes multiple messages from SPAM and restores them to INBOX."""
+        return self.service.users().messages().batchModify(
+            userId="me",
+            body={
+                "ids": message_ids,
+                "addLabelIds": ["INBOX"],
+                "removeLabelIds": ["SPAM"]
+            }
+        ).execute()
