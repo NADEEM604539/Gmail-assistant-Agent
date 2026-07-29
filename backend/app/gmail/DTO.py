@@ -80,3 +80,6 @@ class StarRequest(BaseModel):
 class ReadRequest(BaseModel):
     unread: bool
 
+class AutoReply(BaseModel):
+    auto_reply: bool
+

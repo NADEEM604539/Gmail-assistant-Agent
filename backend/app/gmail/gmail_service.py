@@ -889,6 +889,46 @@ class GmailService:
             }
         ).execute()
 
+    
+
+    def toggle_read_status(self, message_id: str) -> Dict[str, Any]:
+        """
+        Toggle the read/unread status of a Gmail message.
+        """
+
+        # Get the current labels of the message
+        message = self.service.users().messages().get(
+            userId="me",
+            id=message_id,
+            format="minimal"
+        ).execute()
+
+        labels = message.get("labelIds", [])
+
+        if "UNREAD" in labels:
+            # Message is unread -> mark as read
+            body = {
+                "removeLabelIds": ["UNREAD"]
+            }
+            status = "read"
+        else:
+            # Message is read -> mark as unread
+            body = {
+                "addLabelIds": ["UNREAD"]
+            }
+            status = "unread"
+
+        self.service.users().messages().modify(
+            userId="me",
+            id=message_id,
+            body=body
+        ).execute()
+
+        return {
+            "message_id": message_id,
+            "status": status
+        }
+
     def mark_as_read(self, message_id: str) -> Dict[str, Any]:
         """Marks specified message as read by removing the UNREAD label."""
         return self.service.users().messages().modify(

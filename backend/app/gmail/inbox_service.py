@@ -83,6 +83,7 @@ def star_status(user_id:int, message_id:str):
                 client_secret=GOOGLE_CLIENT_SECRET
             )   
     star = gmail.star_message(message_id=message_id)
+    db.close()
     return star
 
      
@@ -101,7 +102,9 @@ def read_status(user_id:int, message_id:str):
                 client_id=GOOGLE_CLIENT_ID,
                 client_secret=GOOGLE_CLIENT_SECRET
             )   
-    read = gmail.mark_as_read(message_id=message_id)
+    read = gmail.toggle_read_status(message_id=message_id)
+    db.close()
+    return read
      
     
 def archive(user_id:int, message_id:str):
@@ -119,6 +122,7 @@ def archive(user_id:int, message_id:str):
                 client_secret=GOOGLE_CLIENT_SECRET
             )    
     archive = gmail.archive_message(message_id=message_id)
+    db.close()
     return archive
 
     
@@ -137,6 +141,7 @@ def untrash(user_id:int, message_id:str):
                 client_secret=GOOGLE_CLIENT_SECRET
             ) 
     untrash = gmail.untrash_message(message_id=message_id) 
+    db.close()
     return untrash 
 
     
@@ -155,6 +160,7 @@ def markspam(user_id:int, message_id:str):
                 client_secret=GOOGLE_CLIENT_SECRET
             )
     spam = gmail.mark_as_spam(message_id=message_id)
+    db.close()
     return spam
 
     
@@ -173,6 +179,7 @@ def mark_not_spam(user_id:int, message_id:str):
                 client_secret=GOOGLE_CLIENT_SECRET
             )    
     not_spam = gmail.mark_as_not_spam(message_id=message_id)
+    db.close()
     return not_spam
 
 

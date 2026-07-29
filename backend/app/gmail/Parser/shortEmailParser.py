@@ -160,25 +160,32 @@ def get_folder(labels):
 # --------------------------------------------------
 # Universal Parser
 # --------------------------------------------------
-
 def Short_email_parser(email):
+    # If the email passed in is already parsed or not a raw dict, return as-is
+    if not isinstance(email, dict):
+        return {}
+    
+    # Check if this object was ALREADY parsed by Short_email_parser
+    if "payload" not in email and "from" in email:
+        return email
 
-    payload = email["payload"]
+    # Safely extract payload (defaults to empty dict if missing)
+    payload = email.get("payload", {})
+    if not payload and "id" not in email:
+        # Invalid payload structure
+        return {}
 
     headers = get_headers(payload)
-
     labels = email.get("labelIds", [])
-
     body = get_email_body(payload)
-
     recipients = get_recipients(headers)
-
     attachments = get_attachments(payload)
 
     sender_name, sender_email = parseaddr(headers.get("From", ""))
 
+    dt_header = headers.get("Date")
     try:
-        dt = parsedate_to_datetime(headers["Date"])
+        dt = parsedate_to_datetime(dt_header) if dt_header else None
     except Exception:
         dt = None
 
@@ -194,100 +201,56 @@ def Short_email_parser(email):
         status = "Read"
 
     return {
-
-        # -------------------------------
         # IDs
-        # -------------------------------
-
-        "id": email["id"],
-        "threadId": email["threadId"],
+        "id": email.get("id", ""),
+        "threadId": email.get("threadId", ""),
         "historyId": int(email.get("historyId", 0)),
 
-        # -------------------------------
         # Folder
-        # -------------------------------
-
         "folder": folder,
         "labels": labels,
 
-        # -------------------------------
         # People
-        # -------------------------------
-
         "from": {
             "name": sender_name,
             "email": sender_email,
         },
-
         "to": [r for r in recipients if r["type"] == "to"],
         "cc": [r for r in recipients if r["type"] == "cc"],
         "bcc": [r for r in recipients if r["type"] == "bcc"],
 
-        # -------------------------------
         # Content
-        # -------------------------------
-
         "subject": headers.get("Subject", ""),
         "preview": email.get("snippet", ""),
         "body": body,
 
-        # -------------------------------
         # Time
-        # -------------------------------
-
         "date": dt,
         "time": format_time(dt),
         "sentTime": format_sent_time(dt),
 
-        # -------------------------------
         # Flags
-        # -------------------------------
-
         "status": status,
         "unread": "UNREAD" in labels,
         "starred": "STARRED" in labels,
         "important": "IMPORTANT" in labels,
+        "importance": "high" if "IMPORTANT" in labels else "normal",
 
-        "importance": (
-            "high"
-            if "IMPORTANT" in labels
-            else "normal"
-        ),
-
-        # -------------------------------
         # Attachments
-        # -------------------------------
-
         "attachments": attachments,
         "hasAttachment": len(attachments) > 0,
 
-        # -------------------------------
         # UI Helpers
-        # -------------------------------
-
         "category": get_category(labels),
-
         "displayName": (
-            sender_name
-            if folder == "inbox"
+            sender_name if folder == "inbox"
             else (
-                recipients[0]["name"]
-                if recipients and recipients[0]["name"]
-                else (
-                    recipients[0]["email"]
-                    if recipients
-                    else "No recipient"
-                )
+                recipients[0]["name"] if recipients and recipients[0]["name"]
+                else (recipients[0]["email"] if recipients else "No recipient")
             )
         ),
-
         "displayEmail": (
-            sender_email
-            if folder == "inbox"
-            else (
-                recipients[0]["email"]
-                if recipients
-                else ""
-            )
+            sender_email if folder == "inbox"
+            else (recipients[0]["email"] if recipients else "")
         ),
     }

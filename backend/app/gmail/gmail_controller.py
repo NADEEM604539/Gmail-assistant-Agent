@@ -4,11 +4,11 @@ from app.gmail.DTO import parse_recipients
 from app.auth.DTO import GoogleLoginRequest
 from app.auth.jwt.service import get_current_user
 from app.chatbot.agent.objects import DraftEmail, EmailAttachment, EmailRecipient
-from app.gmail.gmail import get_5_emails, getEmail
+from app.gmail.gmail import get_5_emails, getEmail, get_account, toggle_auto_reply
 from app.gmail.inbox_service import get_Inbox, deleteBunch, trashBunch, star_status, read_status, archive, untrash, markspam, mark_not_spam, delete, trashOne
 from app.gmail.sent_service import get_Sent, draft_Sent
 from app.gmail.draft_service import get_Draft
-from app.gmail.DTO import DraftRequest, Attachment, DraftPayload, MessageIdsRequest, StarRequest, ReadRequest
+from app.gmail.DTO import DraftRequest, Attachment, DraftPayload, MessageIdsRequest, StarRequest, ReadRequest,  AutoReply
 from app.gmail.draft_service import genAI_draft, gen_draft, update_draft, send_draft, delete_draft
 from app.gmail.reply_service import create_reply_draft, forward_email, reply_to_email , update_reply_draft
 
@@ -434,3 +434,13 @@ async def delete_messages(
     """Bulk permanently delete multiple messages."""
     delete_status = deleteBunch(current_user["user_id"], request=request)
     return delete_status
+
+@router.get('/account')
+def account(current_user=Depends(get_current_user)):
+    account = get_account(current_user["user_id"])
+    return account
+
+@router.patch('/account/auto-reply')
+def account(reply:AutoReply, current_user=Depends(get_current_user)):
+    auto_reply = toggle_auto_reply(user_id=current_user["user_id"], status= reply.auto_reply)
+    return auto_reply
