@@ -198,7 +198,6 @@ export default function EmailPage() {
   const [starred, setStarred] = useState(false);
   const [unread, setUnread] = useState(false);
   const [recipientsOpen, setRecipientsOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [replyMode, setReplyMode] = useState(null); // 'reply' | 'replyAll' | 'forward' | null
   const [replyBody, setReplyBody] = useState("");
   const [forwardTo, setForwardTo] = useState("");
@@ -854,7 +853,7 @@ export default function EmailPage() {
               <button
                 onClick={trashEmail}
                 disabled={actionLoading === "trash"}
-                title="Delete"
+                title="Trash"
                 className="rounded-full p-2 hover:bg-[#e8eaed] disabled:opacity-50"
               >
                 <Trash2 size={18} className="text-[#5f6368]" />
@@ -1049,13 +1048,6 @@ export default function EmailPage() {
                         }
                       />
                     </button>
-                    <button
-                      onClick={() => setDetailsOpen((v) => !v)}
-                      title="Show details"
-                      className="rounded-full p-1.5 hover:bg-[#f1f3f4]"
-                    >
-                      <Info size={17} className="text-[#9aa0a6]" />
-                    </button>
                   </div>
                 </div>
               </div>
@@ -1218,78 +1210,6 @@ export default function EmailPage() {
                 </div>
               </div>
             )}
-
-            {/* Details / security / threading panel */}
-            {detailsOpen && !isDraft && (
-              <div className="mt-4 rounded-lg border border-[#e8eaed] bg-[#f8f9fa] p-4 text-[13px]">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <div className="mb-2 font-medium text-[#202124]">
-                      Authentication
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {["spf", "dkim", "dmarc"].map((mech) => {
-                        const badge = securityBadge(sec[mech]);
-                        const Icon = badge.icon;
-                        return (
-                          <span
-                            key={mech}
-                            className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium"
-                            style={{ backgroundColor: badge.bg, color: badge.color }}
-                          >
-                            <Icon size={13} />
-                            {mech.toUpperCase()}: {badge.label}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="mb-2 font-medium text-[#202124]">
-                      Message details
-                    </div>
-                    <div className="space-y-1 text-[#5f6368]">
-                      <div className="truncate">
-                        <span className="text-[#202124]">Message-ID:</span>{" "}
-                        {thread.message_id || "—"}
-                      </div>
-                      <div className="truncate">
-                        <span className="text-[#202124]">In-Reply-To:</span>{" "}
-                        {thread.in_reply_to || "—"}
-                      </div>
-                      <div>
-                        <span className="text-[#202124]">References:</span>{" "}
-                        {thread.reference_count || 0}
-                      </div>
-                      <div>
-                        <span className="text-[#202124]">Thread ID:</span>{" "}
-                        {email.thread_id}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {(mailingList.list_id || mailingList.list_unsubscribe) && (
-                  <div className="mt-4 flex items-center justify-between border-t border-[#e8eaed] pt-3">
-                    <div className="flex items-center gap-2 text-[#5f6368]">
-                      <Users size={14} />
-                      <span>
-                        {mailingList.list_id
-                          ? `Mailing list: ${mailingList.list_id}`
-                          : "This looks like a mailing list message"}
-                      </span>
-                    </div>
-                    {mailingList.list_unsubscribe && (
-                      <span className="cursor-default rounded-full border border-[#dadce0] px-3 py-1 text-[12px] text-[#5f6368]">
-                        Unsubscribe available
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Body */}
             <div className="mt-5">
               {isDraft ? (
