@@ -72,3 +72,11 @@ class DraftRequest(BaseModel):
 
 class MessageIdsRequest(BaseModel):
     message_ids: list[str] = Field(..., min_length=1)
+
+class StarRequest(BaseModel):
+        starred: bool
+
+
+class ReadRequest(BaseModel):
+    unread: bool
+
