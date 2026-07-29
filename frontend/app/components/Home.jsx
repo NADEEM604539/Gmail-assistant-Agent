@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import Analytics from "../analytics/page";
+import PreferencesPage from "./Preferences";
 import {
     ArrowRight,
     Bot,
@@ -363,6 +364,7 @@ export default function Home({ user }) {
                     ))}
                 </div>
 
+                <PreferencesPage />
                 <Analytics />
 
             </section>
