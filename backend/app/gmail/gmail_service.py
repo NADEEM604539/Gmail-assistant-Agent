@@ -14,10 +14,12 @@ from app.gmail.Parser.fullEmailParser import parse_email_full
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
+from typing import List
 from email import encoders
 import mimetypes
 import os
 from app.gmail.DTO import DraftPayload
+from app.chatbot.agent.objects import ReplyEmail
 from app.chatbot.agent.objects import DraftEmail, EmailRecipient
 
 
@@ -827,7 +829,7 @@ class GmailService:
     # Trash & Delete Operations
     # ---------------------------------------------------------------------------
 
-    def trash_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+    def trash_bulk_messages(self, message_ids: List[str]) :
         """Moves multiple messages to Trash via batchModify."""
         return self.service.users().messages().batchModify(
             userId="me",
@@ -837,14 +839,14 @@ class GmailService:
             }
         ).execute()
 
-    def trash_message(self, message_id: str) -> Dict[str, Any]:
+    def trash_message(self, message_id: str) :
         """Moves a single message to Trash."""
         return self.service.users().messages().trash(
             userId="me",
             id=message_id
         ).execute()
 
-    def delete_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+    def delete_bulk_messages(self, message_ids: List[str]) :
         """Permanently deletes multiple messages."""
         return self.service.users().messages().batchDelete(
             userId="me",
@@ -858,7 +860,7 @@ class GmailService:
             id=message_id
         ).execute()
 
-    def untrash_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+    def untrash_bulk_messages(self, message_ids: List[str]) :
         """Restores multiple messages from Trash by removing the TRASH label."""
         return self.service.users().messages().batchModify(
             userId="me",
@@ -868,7 +870,7 @@ class GmailService:
             }
         ).execute()
 
-    def untrash_message(self, message_id: str) -> Dict[str, Any]:
+    def untrash_message(self, message_id: str) :
         """Restores a single message from Trash back to its prior state."""
         return self.service.users().messages().untrash(
             userId="me",
@@ -879,7 +881,7 @@ class GmailService:
     # Label & Message State Operations (Read, Star, Archive)
     # ---------------------------------------------------------------------------
 
-    def mark_bulk_as_read(self, message_ids: List[str]) -> Dict[str, Any]:
+    def mark_bulk_as_read(self, message_ids: List[str]) :
         """Marks specified messages as read by removing the UNREAD label."""
         return self.service.users().messages().batchModify(
             userId="me",
@@ -891,7 +893,7 @@ class GmailService:
 
     
 
-    def toggle_read_status(self, message_id: str) -> Dict[str, Any]:
+    def toggle_read_status(self, message_id: str) :
         """
         Toggle the read/unread status of a Gmail message.
         """
@@ -929,7 +931,7 @@ class GmailService:
             "status": status
         }
 
-    def mark_as_read(self, message_id: str) -> Dict[str, Any]:
+    def mark_as_read(self, message_id: str):
         """Marks specified message as read by removing the UNREAD label."""
         return self.service.users().messages().modify(
             userId="me",
@@ -937,7 +939,7 @@ class GmailService:
             body={"removeLabelIds": ["UNREAD"]}
         ).execute()
 
-    def mark_bulk_as_unread(self, message_ids: List[str]) -> Dict[str, Any]:
+    def mark_bulk_as_unread(self, message_ids: List[str]):
         """Marks specified messages as unread by adding the UNREAD label."""
         return self.service.users().messages().batchModify(
             userId="me",
@@ -947,7 +949,7 @@ class GmailService:
             }
         ).execute()
 
-    def mark_as_unread(self, message_id: str) -> Dict[str, Any]:
+    def mark_as_unread(self, message_id: str):
         """Marks specified message as unread by adding the UNREAD label."""
         return self.service.users().messages().modify(
             userId="me",
@@ -955,7 +957,7 @@ class GmailService:
             body={"addLabelIds": ["UNREAD"]}
         ).execute()
 
-    def star_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+    def star_bulk_messages(self, message_ids: List[str]):
         """Stars specified messages by adding the STARRED label."""
         return self.service.users().messages().batchModify(
             userId="me",
@@ -965,7 +967,7 @@ class GmailService:
             }
         ).execute()
 
-    def star_message(self, message_id: str) -> Dict[str, Any]:
+    def star_message(self, message_id: str):
         """Stars specified message by adding the STARRED label."""
         return self.service.users().messages().modify(
             userId="me",
@@ -973,7 +975,7 @@ class GmailService:
             body={"addLabelIds": ["STARRED"]}
         ).execute()
 
-    def unstar_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+    def unstar_bulk_messages(self, message_ids: List[str]):
         """Unstars specified messages by removing the STARRED label."""
         return self.service.users().messages().batchModify(
             userId="me",
@@ -983,7 +985,7 @@ class GmailService:
             }
         ).execute()
 
-    def unstar_message(self, message_id: str) -> Dict[str, Any]:
+    def unstar_message(self, message_id: str):
         """Unstars specified message by removing the STARRED label."""
         return self.service.users().messages().modify(
             userId="me",
@@ -991,7 +993,7 @@ class GmailService:
             body={"removeLabelIds": ["STARRED"]}
         ).execute()
 
-    def archive_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+    def archive_bulk_messages(self, message_ids: List[str]) :
         """Archives messages by removing them from the INBOX."""
         return self.service.users().messages().batchModify(
             userId="me",
@@ -1001,7 +1003,7 @@ class GmailService:
             }
         ).execute()
 
-    def archive_message(self, message_id: str) -> Dict[str, Any]:
+    def archive_message(self, message_id: str) :
         """Archives message by removing it from the INBOX."""
         return self.service.users().messages().modify(
             userId="me",
@@ -1009,7 +1011,7 @@ class GmailService:
             body={"removeLabelIds": ["INBOX"]}
         ).execute()
 
-    def unarchive_bulk_messages(self, message_ids: List[str]) -> Dict[str, Any]:
+    def unarchive_bulk_messages(self, message_ids: List[str]) :
         """Unarchives messages by restoring them back to the INBOX."""
         return self.service.users().messages().batchModify(
             userId="me",
@@ -1019,7 +1021,7 @@ class GmailService:
             }
         ).execute()
 
-    def unarchive_message(self, message_id: str) -> Dict[str, Any]:
+    def unarchive_message(self, message_id: str) :
         """Unarchives message by restoring it back to the INBOX."""
         return self.service.users().messages().modify(
             userId="me",
@@ -1031,7 +1033,7 @@ class GmailService:
     # Spam / Not Spam Operations
     # ---------------------------------------------------------------------------
 
-    def mark_as_spam(self, message_id: str) -> Dict[str, Any]:
+    def mark_as_spam(self, message_id: str) :
         """Moves a single message to SPAM and removes it from INBOX."""
         return self.service.users().messages().modify(
             userId="me",
@@ -1042,7 +1044,7 @@ class GmailService:
             }
         ).execute()
 
-    def mark_as_not_spam(self, message_id: str) -> Dict[str, Any]:
+    def mark_as_not_spam(self, message_id: str) :
         """Removes a single message from SPAM and restores it to INBOX."""
         return self.service.users().messages().modify(
             userId="me",
@@ -1053,7 +1055,7 @@ class GmailService:
             }
         ).execute()
 
-    def bulk_mark_as_spam(self, message_ids: List[str]) -> Dict[str, Any]:
+    def bulk_mark_as_spam(self, message_ids: List[str]) :
         """Moves multiple messages to SPAM in a single request."""
         return self.service.users().messages().batchModify(
             userId="me",
@@ -1064,7 +1066,7 @@ class GmailService:
             }
         ).execute()
 
-    def bulk_mark_as_not_spam(self, message_ids: List[str]) -> Dict[str, Any]:
+    def bulk_mark_as_not_spam(self, message_ids: List[str]) :
         """Removes multiple messages from SPAM and restores them to INBOX."""
         return self.service.users().messages().batchModify(
             userId="me",
@@ -1073,4 +1075,125 @@ class GmailService:
                 "addLabelIds": ["INBOX"],
                 "removeLabelIds": ["SPAM"]
             }
+        ).execute()
+
+    def get_latest_history_id(self) -> str:
+        """Returns the latest Gmail historyId for the account."""
+        response = (
+            self.service.users()
+            .messages()
+            .list(
+                userId="me",
+                maxResults=1
+            )
+            .execute()
+        )
+
+        messages = response.get("messages", [])
+
+        if not messages:
+            return None
+
+        message = (
+            self.service.users()
+            .messages()
+            .get(
+                userId="me",
+                id=messages[0]["id"],
+                format="minimal"
+            )
+            .execute()
+        )
+
+        return message.get("historyId")
+
+
+
+    def get_messages_since_history_id(self, start_history_id: str):
+        response = (
+        self.service.users()
+        .history()
+        .list(
+            userId="me",
+            startHistoryId=start_history_id,
+            historyTypes=["messageAdded"]
+        )
+        .execute()
+    )
+
+        history = response.get("history", [])
+
+        emails = []
+        seen = set()
+
+        for item in history:
+            for added in item.get("messagesAdded", []):
+
+                message_id = added["message"]["id"]
+
+                if message_id in seen:
+                    continue
+
+                seen.add(message_id)
+
+                gmail_message = self.get_message(message_id)
+
+                emails.append(Short_email_parser(gmail_message))
+
+        return emails
+
+
+    def auto_reply_send(self, message_id: str,email: ReplyEmail, reply_all: bool = False,):
+        """
+        Sends an immediate reply to an existing Gmail message.
+
+        Args:
+            message_id: Gmail message ID to reply to.
+            email: ReplyEmail object containing only the reply body.
+            reply_all: Whether to reply to all recipients.
+        """
+
+        # Fetch original message context
+        context = self._get_original_context(message_id)
+
+        # Build recipients
+        to_recipients, cc_recipients = self._build_reply_recipients(
+            context,
+            reply_all=reply_all,
+        )
+
+        # Subject
+        subject = context["subject"] or ""
+        if not subject.lower().startswith("re:"):
+            subject = f"Re: {subject}"
+
+        # Build MIME message
+        message = MIMEText(email.body, "plain", "utf-8")
+
+        message["To"] = ", ".join(r.email for r in to_recipients)
+
+        if cc_recipients:
+            message["Cc"] = ", ".join(r.email for r in cc_recipients)
+
+        message["Subject"] = subject
+
+        # Threading headers
+        if context.get("message_id_header"):
+            message["In-Reply-To"] = context["message_id_header"]
+            message["References"] = context["message_id_header"]
+
+        # Encode
+        raw = base64.urlsafe_b64encode(
+            message.as_bytes()
+        ).decode()
+
+        body = {
+            "raw": raw,
+            "threadId": context["thread_id"],
+        }
+
+        # Send
+        return self.service.users().messages().send(
+            userId="me",
+            body=body,
         ).execute()

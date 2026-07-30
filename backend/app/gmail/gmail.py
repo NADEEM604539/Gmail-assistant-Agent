@@ -269,15 +269,29 @@ def get_account(user_id:int):
 def toggle_auto_reply(user_id: int, auto_reply_status: bool):
     db = SessionLocal()
     try:
+        Query = text("""
+        SELECT refresh_token FROM gmail_accounts
+        WHERE user_id = :user_id
+        """)
+    
+        token = db.execute(Query, {"user_id": user_id}).mappings().first()
+        gmail = GmailService(
+            refresh_token=token["refresh_token"],
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET
+        )
+        history_id = gmail.get_latest_history_id()
+
         query = text("""
             UPDATE gmail_accounts
-            SET auto_reply = :reply
+            SET auto_reply = :reply, last_history_id=:last_history_id, last_auto_reply_check_at = now()
             WHERE user_id = :user_id
         """)
         
         result = db.execute(query, {
             "user_id": user_id,
-            "reply": auto_reply_status
+            "reply": auto_reply_status,
+            "last_history_id":history_id
         })
         
         db.commit()

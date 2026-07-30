@@ -8,7 +8,7 @@ from app.gmail.gmail import get_5_emails, getEmail, get_account, toggle_auto_rep
 from app.gmail.inbox_service import get_Inbox, deleteBunch, trashBunch, star_status, read_status, archive, untrash, markspam, mark_not_spam, delete, trashOne
 from app.gmail.sent_service import get_Sent, draft_Sent
 from app.gmail.draft_service import get_Draft
-from app.gmail.DTO import DraftRequest, Attachment, DraftPayload, MessageIdsRequest, StarRequest, ReadRequest,  AutoReply
+from app.gmail.DTO import DraftRequest, Attachment, DraftPayload, MessageIdsRequest, StarRequest, ReadRequest,  AutoReply, User
 from app.gmail.draft_service import genAI_draft, gen_draft, update_draft, send_draft, delete_draft
 from app.gmail.reply_service import create_reply_draft, forward_email, reply_to_email , update_reply_draft
 
@@ -73,8 +73,12 @@ def getDraft(current_user = Depends(get_current_user)):
 
 @router.post('/draft/create')
 def createDraft(request: DraftRequest, current_user = Depends(get_current_user)):
+    user_details = User(
+    name=current_user["name"],
+    email=current_user["email"]
+    )
     if request.mode == "ai":
-        draft = genAI_draft(request=request, user_id=current_user["user_id"])
+        draft = genAI_draft(request=request, user_id=current_user["user_id"], user_details=user_details)
     else:
         draft = gen_draft(request=request, user_id=current_user["user_id"])
 

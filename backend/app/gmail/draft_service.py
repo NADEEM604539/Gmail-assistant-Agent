@@ -5,7 +5,7 @@ from sqlalchemy import text
 
 from app.chatbot.agent.llm.llm_output_parsers import generateDraft as llmDraft
 from app.database.database import SessionLocal
-from app.gmail.DTO import DraftRequest
+from app.gmail.DTO import DraftRequest, User
 from app.gmail.gmail_service import GmailService
 
 load_dotenv()
@@ -117,7 +117,7 @@ def delete_draft(message_id: str, user_id: int):
     return response
 
 
-def genAI_draft(request: DraftRequest, user_id: int):
+def genAI_draft(request: DraftRequest, user_id: int, user_details: User):
     db = SessionLocal()
     query = text("""
     SELECT refresh_token FROM gmail_accounts
@@ -126,7 +126,7 @@ def genAI_draft(request: DraftRequest, user_id: int):
 
     result = db.execute(query, {"user_id": user_id}).mappings().first()
 
-    email = llmDraft(request=request)
+    email = llmDraft(request=request, user_details=user_details)
     gmail = GmailService(
         refresh_token=result["refresh_token"],
         client_id=GOOGLE_CLIENT_ID,
