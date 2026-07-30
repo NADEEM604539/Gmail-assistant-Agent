@@ -442,5 +442,5 @@ def account(current_user=Depends(get_current_user)):
 
 @router.patch('/account/auto-reply')
 def account(reply:AutoReply, current_user=Depends(get_current_user)):
-    auto_reply = toggle_auto_reply(user_id=current_user["user_id"], status= reply.auto_reply)
+    auto_reply = toggle_auto_reply(user_id=current_user["user_id"], auto_reply_status= reply.auto_reply)
     return auto_reply

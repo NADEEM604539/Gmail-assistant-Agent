@@ -266,25 +266,29 @@ def get_account(user_id:int):
 
     return result
 
-def toggle_auto_reply(user_id: int, reply: bool):
+def toggle_auto_reply(user_id: int, auto_reply_status: bool):
     db = SessionLocal()
     try:
         query = text("""
             UPDATE gmail_accounts
             SET auto_reply = :reply
             WHERE user_id = :user_id
-            RETURNING auto_reply
         """)
         
         result = db.execute(query, {
             "user_id": user_id,
-            "reply": reply
-        }).mappings().first()
+            "reply": auto_reply_status
+        })
         
-        db.commit()  # Required for UPDATE/INSERT queries to save changes
-        return dict(result) if result else None
+        db.commit()
+        
+        # Check if a row was actually updated
+        if result.rowcount > 0:
+            return {"auto_reply": auto_reply_status}
+        return None
+
     except Exception as e:
-        db.rollback()  # Rollback if the database update fails
+        db.rollback()
         raise e
     finally:
         db.close()
