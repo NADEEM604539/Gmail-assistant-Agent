@@ -62,7 +62,7 @@ def _part_headers(part: Dict[str, Any]) -> Dict[str, str]:
     return {h["name"]: h["value"] for h in part.get("headers", [])}
 
 
-def _content_disposition(part_headers: Dict[str, str]) -> Dict[str, Any]:
+def _content_disposition(part_headers: Dict[str, str]) :
     """Parse the Content-Disposition header into {type, filename}."""
     raw = part_headers.get("Content-Disposition", "")
     disp_type = raw.split(";")[0].strip().lower() or None
@@ -215,7 +215,7 @@ def _extract_recipients(grouped: Dict[str, List[str]]) -> List[Dict[str, str]]:
     return recipients
 
 
-def _extract_thread_info(grouped: Dict[str, List[str]], subject: str) -> Dict[str, Any]:
+def _extract_thread_info(grouped: Dict[str, List[str]], subject: str) :
     """Reply/forward chain metadata."""
     message_id = _first_header(grouped, "Message-ID") or None
     in_reply_to = _first_header(grouped, "In-Reply-To") or None
@@ -239,7 +239,7 @@ def _extract_thread_info(grouped: Dict[str, List[str]], subject: str) -> Dict[st
 _AUTH_RESULT_RE = re.compile(r"(spf|dkim|dmarc)=([a-z]+)", re.I)
 
 
-def _extract_security(grouped: Dict[str, List[str]]) -> Dict[str, Any]:
+def _extract_security(grouped: Dict[str, List[str]]) :
     """Parse SPF/DKIM/DMARC verdicts out of Authentication-Results / Received-SPF."""
     auth_header = " ".join(grouped.get("Authentication-Results", []))
     received_spf = _first_header(grouped, "Received-SPF")
@@ -259,7 +259,7 @@ def _extract_security(grouped: Dict[str, List[str]]) -> Dict[str, Any]:
     }
 
 
-def _extract_mailing_list_info(grouped: Dict[str, List[str]]) -> Dict[str, Any]:
+def _extract_mailing_list_info(grouped: Dict[str, List[str]]) :
     return {
         "list_unsubscribe": _first_header(grouped, "List-Unsubscribe") or None,
         "list_id": _first_header(grouped, "List-Id") or None,
@@ -316,7 +316,7 @@ def _domain(address: str) -> Optional[str]:
 # Public entry point
 # --------------------------------------------------------------------------
 
-def parse_email_full(email: Dict[str, Any]) -> Dict[str, Any]:
+def parse_email_full(email: Dict[str, Any]) :
     """
     Parse a raw Gmail API `messages.get` response (format=full) into a
     single rich dict covering headers, threading, security, MIME structure,
