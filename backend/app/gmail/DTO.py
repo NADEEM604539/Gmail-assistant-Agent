@@ -83,3 +83,7 @@ class ReadRequest(BaseModel):
 class AutoReply(BaseModel):
     auto_reply: bool
 
+class User(BaseModel):
+    name: str
+    email: str
+
