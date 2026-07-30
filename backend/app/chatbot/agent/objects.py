@@ -57,3 +57,15 @@ class DraftEmail(BaseModel):
 
     # If information is missing
     missing_information: List[str] = Field(default_factory=list)
+
+
+
+class ShouldReply(BaseModel):
+    reply: bool = Field(description="tells that an email should be replied to or not")
+
+class ReplyEmail(BaseModel):
+    body: str = Field(
+        ...,
+        min_length=1,
+        description="The complete email reply body."
+    )
