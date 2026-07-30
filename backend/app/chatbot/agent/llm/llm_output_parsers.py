@@ -4,10 +4,11 @@ import re
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-from app.chatbot.agent.llm.prompts import EmailDraft_template
+from app.chatbot.agent.llm.prompts import EmailDraft_template, ShouldReply_template, EmailReply_template
 from app.chatbot.agent.objects import DraftEmail
-from app.chatbot.agent.structures import DraftEmail_parser
-from app.gmail.DTO import DraftRequest
+from app.chatbot.agent.structures import DraftEmail_parser, ShouldReply_parser, ReplyEmail_parser
+from app.gmail.DTO import DraftRequest, User
+from app.gmail.Parser.shortEmailParser import Short_email_parser
 
 
 load_dotenv()
@@ -34,7 +35,7 @@ def _extract_text(result):
     return str(result)
 
 
-def generateDraft(request: DraftRequest):
+def generateDraft(request: DraftRequest, user_details: User):
     if hasattr(request, "model_dump_json"):
         user_query = request.model_dump_json()
     elif hasattr(request, "model_dump"):
@@ -42,7 +43,7 @@ def generateDraft(request: DraftRequest):
     else:
         user_query = str(request)
 
-    prompt = EmailDraft_template.format(user_query=user_query)
+    prompt = EmailDraft_template.format(user_query=user_query, user_details = user_details)
     draft = llm.invoke(prompt)
     text = _extract_text(draft)
 
@@ -69,3 +70,12 @@ def generateDraft(request: DraftRequest):
             body=fallback_body,
         )
 
+def shouldReply(email: Short_email_parser):
+    prompt= ShouldReply_template.format(email=email)
+    response = llm.invoke(prompt)
+    return ShouldReply_parser.parse(response.content).reply
+
+def createReplyEmail(request:Short_email_parser, user_details:User):
+    prompt = EmailReply_template.format(user_details=user_details, email=request)
+    response = llm.invoke(prompt)
+    return ReplyEmail_parser.parse(response.content)
