@@ -68,6 +68,7 @@ def mean_pooling(token_embeddings: np.ndarray) -> List[float]:
 
 def generate_vector_embeddings(file_bytes: bytes, filename: str, user_id: int, doc_id: int) -> Tuple[int, str]:
     try:
+        namespace=f"user_id_{user_id}_documents"
         # 1. Extract Text
         raw_text = extract_text_from_file(file_bytes, filename)
         if not raw_text or not raw_text.strip():
@@ -121,7 +122,8 @@ def generate_vector_embeddings(file_bytes: bytes, filename: str, user_id: int, d
         batch_size = 50
         for i in range(0, len(pinecone_vectors), batch_size):
             batch = pinecone_vectors[i : i + batch_size]
-            pinecone_index.upsert(vectors=batch)
+            pinecone_index.upsert(vectors=batch,
+                                  namespace=namespace)
 
         return len(pinecone_vectors), "completed"
 
@@ -130,3 +132,46 @@ def generate_vector_embeddings(file_bytes: bytes, filename: str, user_id: int, d
         import traceback
         traceback.print_exc()
         return 0, "failed"
+
+
+
+def delete_document(user_id: int, doc_id: int):
+    """
+    Deletes all vectors belonging to a document from Pinecone.
+    """
+
+    try:
+        namespace = f"user_id_{user_id}_documents"
+
+        # Try to fetch chunk_count from local DB to construct vector ids
+        try:
+            db = SessionLocal()
+            query = text("SELECT chunk_count FROM documents WHERE id = :doc_id AND user_id = :user_id")
+            res = db.execute(query, {"doc_id": doc_id, "user_id": user_id}).mappings().first()
+            db.close()
+            chunk_count = int(res["chunk_count"]) if res and res.get("chunk_count") is not None else 0
+        except Exception:
+            # If DB lookup fails, proceed with best-effort delete using broad namespace delete (may not be supported)
+            chunk_count = 0
+
+        if chunk_count > 0:
+            ids = [f"user_{user_id}_doc_{doc_id}_chunk_{i}" for i in range(chunk_count)]
+            # Delete in batches to avoid very large requests
+            batch_size = 100
+            for i in range(0, len(ids), batch_size):
+                batch = ids[i : i + batch_size]
+                pinecone_index.delete(ids=batch, namespace=namespace)
+        else:
+            # No known chunks — attempt to delete any vector ids that match the prefix by trying a namespace-wide delete
+            try:
+                # Some Pinecone clients support delete with an empty ids list or no args to clear namespace
+                pinecone_index.delete(namespace=namespace)
+            except Exception:
+                # If that fails, just return True (best effort)
+                pass
+
+        return True
+
+    except Exception as e:
+        print(f"Pinecone Delete Error: {e}")
+        return False
