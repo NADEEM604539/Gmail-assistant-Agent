@@ -11,6 +11,7 @@ from app.stats.stats_controller import router as stats_router
 from app.chatbot.chatbot_contoller import router as chat_router
 from app.preferences.preferences_controller import router as preferences_router
 from app.auto_reply.schedular import start_scheduler, stop_schedular
+from app.embeddings.embed_controller import router as embed_router
 
 from app.database.database import Base
 from app.database.database import engine
@@ -51,3 +52,4 @@ app.include_router(gmail_router, prefix='/api')
 app.include_router(stats_router, prefix='/api')
 app.include_router(chat_router, prefix='/api')
 app.include_router(preferences_router, prefix='/api')
+app.include_router(embed_router, prefix='/api')
