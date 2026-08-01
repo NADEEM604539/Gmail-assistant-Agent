@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Inbox, MessageSquare, Zap, BarChart3,
   Bell, Search, Settings, User, Mail, ChevronLeft,
-  ChevronRight, LogOut, Sparkles, Menu, X,
+  ChevronRight, LogOut, Sparkles, Menu, X, Book,
   PenSquare,
   Send
 } from 'lucide-react';
@@ -17,6 +17,7 @@ import {
 
 const NAV_ITEMS = [
   { id: '', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'source', label: 'Add knowledge', icon: Book },
   { id: 'inbox', label: 'Inbox', icon: Inbox, badge: 12 },
   { id: 'sent', label: 'Sent', icon: Send, badge: 12 },
   { id: 'drafts', label: 'Draft', icon: Mail, badge: 12 },
@@ -26,7 +27,6 @@ const NAV_ITEMS = [
   { id: 'notifications', label: 'Notifications', icon: Bell, badge: 3 },
   { id: 'search', label: 'Search', icon: Search },
   { id: 'settings', label: 'Settings', icon: Settings },
-  { id: 'profile', label: 'Profile', icon: User },
 ];
 
 export default function Sidebar() {
