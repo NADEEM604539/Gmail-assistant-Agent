@@ -1,7 +1,7 @@
 from app.database.database import SessionLocal
 from sqlalchemy import text
 from fastapi import UploadFile, HTTPException
-from app.embeddings.perform_embedding import generate_vector_embeddings
+from app.embeddings.perform_embedding import generate_vector_embeddings, delete_document
 import os
 
 
@@ -91,5 +91,63 @@ def add_embed_docs(file: UploadFile, user_id: int, purpose: str = None):
         db.close()
 
 
-def delete_doc(user_id:int):
-    pass
+def delete_doc(user_id: int, doc_id: int):
+    db = SessionLocal()
+
+    try:
+        # -----------------------------
+        # Delete vectors from Pinecone
+        # -----------------------------
+        success = delete_document(
+            user_id=user_id,
+            doc_id=doc_id
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to delete document vectors from Pinecone."
+            )
+
+        # -----------------------------
+        # Delete document from database
+        # -----------------------------
+        query = text("""
+            DELETE FROM documents
+            WHERE id = :doc_id
+            AND user_id = :user_id
+        """)
+
+        result = db.execute(
+            query,
+            {
+                "doc_id": doc_id,
+                "user_id": user_id
+            }
+        )
+
+        db.commit()
+
+        if result.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found."
+            )
+
+        return {
+            "message": "Document deleted successfully."
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete document: {str(e)}"
+        )
+
+    finally:
+        db.close()
