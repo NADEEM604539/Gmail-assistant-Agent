@@ -196,6 +196,17 @@ export default function DocumentEmbeddingsPage() {
     <div className="min-h-screen bg-[#f6f8fc] text-slate-800 p-4 md:p-8 font-sans">
       <div className="max-w-6xl mx-auto space-y-6">
         
+        {/* Intro Note for non-technical users */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80">
+          <h2 className="text-sm font-semibold text-slate-900">What this does</h2>
+          <p className="text-xs text-slate-600 mt-1">
+            Upload PDF documents here to teach the assistant about your emails and files. The system
+            converts each document into searchable knowledge (vector embeddings) so the agent can use
+            their content to answer questions, find relevant information, and improve replies.
+          </p>
+          <p className="text-xs text-slate-500 mt-2">Only PDF files are accepted. Max size 10 MB.</p>
+        </div>
+
         {/* Header Bar */}
         <header className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-3">
