@@ -25,7 +25,7 @@ def add_docs(
 
 
 
-# @router.delete('/{id}')
-# def del_docs(current_user = Depends(get_current_user)):
-#     delete_docs = delete_doc(user_id=current_user["user_id"])
-#     return delete_docs
+@router.delete('/{id}')
+def del_docs(id: int, current_user = Depends(get_current_user)):
+    delete_docs = delete_doc(user_id=current_user["user_id"], doc_id=id)
+    return delete_docs
