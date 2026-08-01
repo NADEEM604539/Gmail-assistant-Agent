@@ -38,6 +38,15 @@ export default function DocumentEmbeddingsPage() {
     };
   };
 
+  // Redirect to homepage on unauthorized responses
+  const handleUnauthorized = (response) => {
+    if (response && response.status === 401) {
+      if (typeof window !== 'undefined') window.location.href = '/';
+      return true;
+    }
+    return false;
+  };
+
   // Fetch Documents
   const fetchDocuments = async () => {
     setIsLoading(true);
@@ -50,6 +59,8 @@ export default function DocumentEmbeddingsPage() {
           'Content-Type': 'application/json',
         },
       });
+
+      if (handleUnauthorized(response)) return;
 
       if (!response.ok) {
         throw new Error(`Error ${response.status}: Failed to fetch documents`);
@@ -116,6 +127,8 @@ export default function DocumentEmbeddingsPage() {
         body: formData,
       });
 
+      if (handleUnauthorized(response)) return;
+
       if (!response.ok) {
         const errData = await response.json().catch(() => null);
         throw new Error(errData?.detail || `Upload failed with status ${response.status}`);
@@ -145,6 +158,8 @@ export default function DocumentEmbeddingsPage() {
           'Content-Type': 'application/json',
         },
       });
+
+      if (handleUnauthorized(response)) return;
 
       if (!response.ok) {
         throw new Error(`Failed to delete document ${id}`);
@@ -198,13 +213,13 @@ export default function DocumentEmbeddingsPage() {
         
         {/* Intro Note for non-technical users */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80">
-          <h2 className="text-sm font-semibold text-slate-900">What this does</h2>
-          <p className="text-xs text-slate-600 mt-1">
+          <h2 className="text-base font-semibold text-slate-900">What this does</h2>
+          <p className="text-sm text-slate-600 mt-1">
             Upload PDF documents here to teach the assistant about your emails and files. The system
             converts each document into searchable knowledge (vector embeddings) so the agent can use
             their content to answer questions, find relevant information, and improve replies.
           </p>
-          <p className="text-xs text-slate-500 mt-2">Only PDF files are accepted. Max size 10 MB.</p>
+          <p className="text-sm text-slate-500 mt-2">Only PDF files are accepted. Max size 10 MB.</p>
         </div>
 
         {/* Header Bar */}
