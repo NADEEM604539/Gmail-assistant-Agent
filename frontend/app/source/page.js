@@ -73,6 +73,14 @@ export default function DocumentEmbeddingsPage() {
     const file = e.target.files[0];
     if (!file) return;
 
+    // Only allow PDF files
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      setUploadError('Only PDF files are accepted. Please upload a .pdf file.');
+      setSelectedFile(null);
+      return;
+    }
+
     // Check size limit (10MB = 10 * 1024 * 1024 bytes)
     if (file.size > 10 * 1024 * 1024) {
       setUploadError('File size exceeds the maximum allowed limit of 10 MB.');
@@ -237,6 +245,7 @@ export default function DocumentEmbeddingsPage() {
                 <input 
                   type="file" 
                   onChange={handleFileChange}
+                  accept="application/pdf,.pdf"
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
                   disabled={isUploading}
                 />
@@ -257,7 +266,7 @@ export default function DocumentEmbeddingsPage() {
                   <>
                     <UploadCloud className="w-7 h-7 text-slate-400 mb-1" />
                     <p className="text-xs font-medium text-slate-700">Click or drag document to upload</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Supports PDF, TXT, DOCX, etc.</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Accepts PDF files only.</p>
                   </>
                 )}
               </div>
