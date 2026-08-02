@@ -6,6 +6,7 @@ from fastapi import UploadFile, HTTPException
 from sqlalchemy import text
 from app.database.database import SessionLocal
 
+
 # Vector & AI libraries
 import numpy as np
 from huggingface_hub import InferenceClient
@@ -132,7 +133,6 @@ def generate_vector_embeddings(file_bytes: bytes, filename: str, user_id: int, d
         import traceback
         traceback.print_exc()
         return 0, "failed"
-
 
 
 def delete_document(user_id: int, doc_id: int):

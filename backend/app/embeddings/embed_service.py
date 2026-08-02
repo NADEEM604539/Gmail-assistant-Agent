@@ -2,6 +2,7 @@ from app.database.database import SessionLocal
 from sqlalchemy import text
 from fastapi import UploadFile, HTTPException
 from app.embeddings.perform_embedding import generate_vector_embeddings, delete_document
+from langchain.tools import tool
 import os
 
 
@@ -90,8 +91,28 @@ def add_embed_docs(file: UploadFile, user_id: int, purpose: str = None):
     finally:
         db.close()
 
-
+@tool
 def delete_doc(user_id: int, doc_id: int):
+    """
+    Deletes a document and all of its associated vector embeddings.
+
+    This function performs the following operations:
+    1. Deletes the document's vector embeddings from Pinecone.
+    2. Deletes the document record from the database.
+    3. Rolls back the transaction if any operation fails.
+
+    Args:
+        user_id (int): The ID of the document owner.
+        doc_id (int): The ID of the document to delete.
+
+    Returns:
+        dict: A success message if the document and its embeddings are deleted successfully.
+
+    Raises:
+        HTTPException:
+            - 404: If the document does not exist.
+            - 500: If deleting embeddings or the database record fails.
+    """
     db = SessionLocal()
 
     try:
