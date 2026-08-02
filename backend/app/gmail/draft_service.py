@@ -81,7 +81,7 @@ def send_draft(message_id: str, user_id: int):
     query = text("""
     SELECT refresh_token FROM gmail_accounts
     WHERE user_id = :user_id
-""")
+    """)
 
     result = db.execute(query, {"user_id": user_id}).mappings().first()
 
@@ -91,6 +91,22 @@ def send_draft(message_id: str, user_id: int):
         client_secret=GOOGLE_CLIENT_SECRET,
     )
     draft_id = gmail.get_draft_id(message_id=message_id)
+    if not draft_id:
+        draft_id = message_id
+
+    draft = (
+        gmail.service.users()
+        .drafts()
+        .get(userId="me", id=draft_id, format="full")
+        .execute()
+    )
+    headers = {
+        header.get("name", "").lower(): header.get("value", "")
+        for header in draft.get("message", {}).get("payload", {}).get("headers", [])
+    }
+    if not (headers.get("to") or headers.get("cc") or headers.get("bcc")):
+        raise ValueError("Draft has no recipient address. Add at least one To, Cc, or Bcc recipient before sending.")
+
     response = gmail.send_draft(draft_id=draft_id)
     print(response)
     db.close()

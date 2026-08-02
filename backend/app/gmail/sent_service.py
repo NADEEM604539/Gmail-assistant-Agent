@@ -10,8 +10,10 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
 
-
 def get_Sent(user_id : int, max_results=10):
+    """
+    Retrieves the user's most recent sent emails from Gmail, with an optional limit on the number of messages returned.
+    """
     db = SessionLocal()
     query = text("""
     SELECT refresh_token FROM gmail_accounts
@@ -30,8 +32,10 @@ def get_Sent(user_id : int, max_results=10):
     db.close()
     return messages
 
-
 def draft_Sent(user_id : int, message_id:str, draft:DraftPayload):
+    """
+    Updates an existing email draft with the provided content and sends it as an email on behalf of the user.
+    """
     db = SessionLocal()
     query = text("""
     SELECT refresh_token FROM gmail_accounts

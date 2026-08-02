@@ -8,6 +8,7 @@ import json
 from app.gmail.DTO import AutoReply
 from app.gmail.Parser.fullEmailParser import parse_email_full
 from app.gmail.Parser.shortEmailParser import Short_email_parser
+from langchain.tools import tool
 
 
 load_dotenv()
@@ -196,8 +197,10 @@ def get_5_emails( user_id : int,query: str, max_results=5):
     db.close()
     return messages
 
-
 def getEmail(user_id : int, message_id: str):
+    """
+    Retrieves a Gmail message by its ID, parses it into a structured format, and returns the complete email along with its conversation thread (if available) for the specified user.
+    """
     db = SessionLocal()
     Query = text("""
         SELECT refresh_token FROM gmail_accounts

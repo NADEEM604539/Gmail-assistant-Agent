@@ -7,10 +7,12 @@
 # ---------------------------------------------------------------------------
 
 import os
+import base64
 
 from dotenv import load_dotenv
 from sqlalchemy import text
 
+from app.chatbot.agent.objects import DraftEmail
 from app.database.database import SessionLocal
 from app.gmail.gmail_service import GmailService
 
@@ -37,7 +39,7 @@ def _get_gmail_service(user_id: int) -> GmailService:
 
 
 def reply_to_email(message_id: str, user_id: int, body: str, reply_all: bool, attachments=None):
-    """Sends a real reply right away (used by POST /email/{id}/reply)."""
+    """Send a reply to an existing Gmail message for the given user."""
     gmail = _get_gmail_service(user_id)
     return gmail.send_reply(
         original_message_id=message_id,
@@ -48,7 +50,7 @@ def reply_to_email(message_id: str, user_id: int, body: str, reply_all: bool, at
 
 
 def forward_email(message_id: str, user_id: int, to, body: str, attachments=None):
-    """Sends a forward right away (used by POST /email/{id}/forward)."""
+    """Forward an existing Gmail message to one or more recipients."""
     gmail = _get_gmail_service(user_id)
     return gmail.send_forward(
         original_message_id=message_id,
@@ -58,9 +60,26 @@ def forward_email(message_id: str, user_id: int, to, body: str, attachments=None
     )
 
 
+def send_email(user_id: int, subject: str, body: str, to, cc=None, bcc=None, attachments=None):
+    """Send a brand-new email immediately."""
+    gmail = _get_gmail_service(user_id)
+    draft = DraftEmail(
+        subject=subject,
+        body=body,
+        tone="professional",
+        to=to or [],
+        cc=cc or [],
+        bcc=bcc or [],
+        attachments=attachments or [],
+    )
+
+    message = gmail._build_message(draft)
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    return gmail.send_message({"raw": raw})
+
+
 def create_reply_draft(message_id: str, user_id: int, mode: str, body: str, reply_all: bool, to=None, attachments=None):
-    """Creates a new in-progress reply/forward draft
-    (used by POST /email/{id}/draft)."""
+    """Create a draft reply or forward for an existing Gmail message."""
     gmail = _get_gmail_service(user_id)
     result = gmail.create_reply_draft(
         mode=mode,
@@ -83,9 +102,7 @@ def create_reply_draft(message_id: str, user_id: int, mode: str, body: str, repl
 # ---------------------------------------------------------------------------
 
 def update_reply_draft(message_id: str, user_id: int, body: str, to=None, attachments=None):
-    """Rewrites an in-progress reply/forward draft.
-    `message_id` here is the DRAFT's own message id (the one you got back
-    as "id" from create_reply_draft) — nothing else is needed."""
+    """Update an in-progress Gmail reply or forward draft."""
     gmail = _get_gmail_service(user_id)
     result = gmail.update_reply_draft(
         draft_message_id=message_id,

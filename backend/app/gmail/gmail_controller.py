@@ -10,7 +10,7 @@ from app.gmail.sent_service import get_Sent, draft_Sent
 from app.gmail.draft_service import get_Draft
 from app.gmail.DTO import DraftRequest, Attachment, DraftPayload, MessageIdsRequest, StarRequest, ReadRequest,  AutoReply, User
 from app.gmail.draft_service import genAI_draft, gen_draft, update_draft, send_draft, delete_draft
-from app.gmail.reply_service import create_reply_draft, forward_email, reply_to_email , update_reply_draft
+from app.gmail.reply_service import create_reply_draft, forward_email, reply_to_email , update_reply_draft, send_email
 
 router = APIRouter(
     prefix='/gmail',
@@ -237,6 +237,41 @@ async def Forward(
         user_id=current_user["user_id"],
         to=recipients,
         body=body,
+        attachments=files,
+    )
+
+
+@router.post('/email/send')
+async def SendEmail(
+    subject: str = Form(...),
+    body: str = Form(...),
+    to: list[str] = Form(...),
+    cc: list[str] = Form(default=[]),
+    bcc: list[str] = Form(default=[]),
+    attachments: list[UploadFile] = File(default=[]),
+    current_user=Depends(get_current_user),
+):
+    files = [
+        EmailAttachment(
+            filename=f.filename,
+            mime_type=f.content_type or "application/octet-stream",
+            content=await f.read(),
+        )
+        for f in attachments
+        if getattr(f, "filename", None)
+    ]
+
+    recipients = [EmailRecipient(email=addr.strip()) for addr in to if addr and addr.strip()]
+    cc_recipients = [EmailRecipient(email=addr.strip()) for addr in cc if addr and addr.strip()]
+    bcc_recipients = [EmailRecipient(email=addr.strip()) for addr in bcc if addr and addr.strip()]
+
+    return send_email(
+        user_id=current_user["user_id"],
+        subject=subject,
+        body=body,
+        to=recipients,
+        cc=cc_recipients,
+        bcc=bcc_recipients,
         attachments=files,
     )
 
