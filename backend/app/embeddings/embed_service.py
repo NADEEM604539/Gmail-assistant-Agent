@@ -5,8 +5,11 @@ from app.embeddings.perform_embedding import generate_vector_embeddings, delete_
 from langchain.tools import tool
 import os
 
-
+@tool
 def get_embed_docs(user_id:int):
+    """
+    This get all the documents uploaded for a specific user knowlege source for implementing RAG
+    """
     db = SessionLocal()
 
     query = text("""
