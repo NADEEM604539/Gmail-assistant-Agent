@@ -8,6 +8,7 @@ class Workflow(TypedDict, total=False):
     user_prompt: str
     message_ids: list[str]
     selected_agent: str
+    selected_agents: list[str]
     content: str
     final_response: str
     backend_details: dict[str, Any]
@@ -16,3 +17,4 @@ class Workflow(TypedDict, total=False):
     agents_called: list[dict[str, Any]]
     tools_called: list[dict[str, Any]]
     token_usage: dict[str, int]
+    agent_results: list[dict[str, Any]]
