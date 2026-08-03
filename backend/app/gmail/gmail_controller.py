@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, Request , HTTPException, Form, File, UploadFile
+from fastapi.responses import Response
 from app.auth.auth_service import googleLogin
 from app.gmail.DTO import parse_recipients
 from app.auth.DTO import GoogleLoginRequest
 from app.auth.jwt.service import get_current_user
 from app.chatbot.agent.objects import DraftEmail, EmailAttachment, EmailRecipient
 from app.gmail.gmail import get_5_emails, getEmail, get_account, toggle_auto_reply
-from app.gmail.inbox_service import get_Inbox, deleteBunch, trashBunch, star_status, read_status, archive, untrash, markspam, mark_not_spam, delete, trashOne
+from app.gmail.inbox_service import get_Inbox, deleteBunch, trashBunch,manage_star_status , read_status, archive, untrash, markspam, mark_not_spam, delete, trashOne
 from app.gmail.sent_service import get_Sent, draft_Sent
 from app.gmail.draft_service import get_Draft
 from app.gmail.DTO import DraftRequest, Attachment, DraftPayload, MessageIdsRequest, StarRequest, ReadRequest,  AutoReply, User
@@ -59,6 +60,40 @@ def inbox(current_user= Depends(get_current_user)):
 def getMail(email_id: str, current_user = Depends(get_current_user)):
     Email = getEmail(user_id=current_user["user_id"], message_id=email_id)
     return Email
+
+
+@router.get('/email/{email_id}/attachments/{attachment_id}')
+def download_attachment(email_id: str, attachment_id: str, current_user=Depends(get_current_user)):
+    from app.gmail.gmail_service import GmailService
+    from app.database.database import SessionLocal
+    from sqlalchemy import text
+    import os
+
+    db = SessionLocal()
+    query = text("""
+        SELECT refresh_token FROM gmail_accounts
+        WHERE user_id = :user_id
+    """)
+    result = db.execute(query, {"user_id": current_user["user_id"]}).mappings().first()
+    db.close()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="No Gmail account connected")
+
+    gmail = GmailService(
+        refresh_token=result["refresh_token"],
+        client_id=os.getenv("GOOGLE_CLIENT_ID"),
+        client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    )
+    attachment = gmail.get_attachment(email_id, attachment_id)
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    return Response(
+        content=attachment["data"],
+        media_type=attachment["mime_type"],
+        headers={"Content-Disposition": f'attachment; filename="{attachment["filename"]}"'},
+    )
 
 
 @router.get('/sent')
@@ -366,9 +401,10 @@ async def toggle_star_endpoint(
     current_user=Depends(get_current_user)
 ):
     """Toggle star state for a specific email."""
-    result = star_status(
+    result = manage_star_status(
         user_id=current_user["user_id"],
         message_id=id,
+        star_status=payload.starred
     )
     return {"success": True, "starred": payload.starred, "details": result}
 

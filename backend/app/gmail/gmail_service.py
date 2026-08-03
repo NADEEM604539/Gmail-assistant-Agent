@@ -431,6 +431,56 @@ class GmailService:
             "thread_id": result.get("threadId"),
         }
 
+    def get_attachment(self, message_id: str, attachment_id: str):
+        """Fetch a single Gmail attachment by message and attachment id."""
+        message = self.get_message(message_id)
+        payload = message.get("payload", {})
+
+        def walk_parts(parts):
+            for part in parts or []:
+                yield part
+                yield from walk_parts(part.get("parts") or [])
+
+        matching_part = None
+        for part in walk_parts(payload.get("parts") or []):
+            body = part.get("body") or {}
+            if body.get("attachmentId") == attachment_id:
+                matching_part = part
+                break
+
+        if not matching_part:
+            for part in walk_parts(payload.get("parts") or []):
+                body = part.get("body") or {}
+                if body.get("attachmentId"):
+                    matching_part = part
+                    break
+
+        if not matching_part:
+            return None
+
+        try:
+            attachment_data = (
+                self.service.users()
+                .messages()
+                .attachments()
+                .get(userId="me", messageId=message_id, id=attachment_id)
+                .execute()
+            )
+        except Exception:
+            attachment_data = {}
+
+        data = attachment_data.get("data")
+        if not data:
+            body = matching_part.get("body") or {}
+            data = body.get("data")
+
+        return {
+            "filename": matching_part.get("filename") or "attachment",
+            "mime_type": matching_part.get("mimeType") or attachment_data.get("mimeType") or "application/octet-stream",
+            "data": base64.urlsafe_b64decode((data or "") + "=" * (-len(data or "") % 4)),
+            "size": (matching_part.get("body") or {}).get("size"),
+        }
+
     def get_message_attachments(self, message_id: str):
         """
         Fetches attachment content for an existing message so it can be
@@ -1136,7 +1186,10 @@ class GmailService:
 
                 seen.add(message_id)
 
-                gmail_message = self.get_message(message_id)
+                try:
+                    gmail_message = self.get_message(message_id)
+                except Exception:
+                    continue
 
                 emails.append(Short_email_parser(gmail_message))
 

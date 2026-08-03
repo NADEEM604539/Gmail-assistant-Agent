@@ -75,8 +75,8 @@ def deleteBunch(user_id:int,  request: MessageIdsRequest):
     return messages
 
 
-def star_status(user_id:int, message_id:str):
-    """Star a Gmail message."""
+def  manage_star_status(user_id:int, message_id:str, star_status:bool):
+    """Manage staring or unstaring of the email the value passed in the star_status is set as the value """
     db = SessionLocal()
     query = text("""
             SELECT refresh_token FROM gmail_accounts
@@ -90,9 +90,12 @@ def star_status(user_id:int, message_id:str):
                 client_id=GOOGLE_CLIENT_ID,
                 client_secret=GOOGLE_CLIENT_SECRET
             )   
-    star = gmail.star_message(message_id=message_id)
+    if star_status:
+        status = gmail.star_message(message_id=message_id)
+    else:
+        status = gmail.unstar_message(message_id=message_id)
     db.close()
-    return star
+    return status
 
      
 
