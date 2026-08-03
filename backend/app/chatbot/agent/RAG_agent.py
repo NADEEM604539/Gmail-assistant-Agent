@@ -1,6 +1,9 @@
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
+from openai import BadRequestError
+
 from app.chatbot.agent.retrieval.retrieval_from_docs import retrieval_from_docs
+from app.chatbot.agent.llm.error_handling import build_agent_error_response
 
 
 llm = ChatOpenAI(
@@ -37,20 +40,23 @@ def _extract_token_usage(message):
     }
 
 def callagent(user_id:int, query:str):
-    result = agent.invoke(
-        {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": f"Use retrieval tools for user_id={user_id}. Only use that user's data.",
-                },
-                {
-                    "role": "user",
-                    "content": query,
-                },
-            ]
-        }
-    )
+    try:
+        result = agent.invoke(
+            {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": f"Use retrieval tools for user_id={user_id}. Only use that user's data.",
+                    },
+                    {
+                        "role": "user",
+                        "content": query,
+                    },
+                ]
+            }
+        )
+    except BadRequestError as error:
+        return build_agent_error_response("retrieval", user_id, query, error)
 
     messages = result.get("messages", [])
     tool_calls = []
