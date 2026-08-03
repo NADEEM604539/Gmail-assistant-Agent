@@ -124,6 +124,8 @@ export default function DraftsPage() {
       })
 
       if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('access_token')
+        router.push('/')
         setError('auth')
         setDrafts([])
         return
@@ -197,6 +199,12 @@ export default function DraftsPage() {
           message_ids: Array.from(selected),
         }),
       })
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('access_token')
+        router.push('/')
+        return
+      }
 
       if (!response.ok) {
         throw new Error('Failed to permanently delete emails')

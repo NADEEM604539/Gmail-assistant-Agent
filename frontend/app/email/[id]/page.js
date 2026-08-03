@@ -319,6 +319,51 @@ export default function EmailPage() {
     }
   };
 
+  const handleAttachmentDownload = async (att) => {
+    if (!att?.attachment_id) {
+      if (att?.download_url) {
+        window.open(att.download_url, "_blank", "noopener,noreferrer");
+      }
+      return;
+    }
+
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      localStorage.removeItem("access_token");
+      router.push("/");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API}/api/gmail/email/${id}/attachments/${att.attachment_id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem("access_token");
+        router.push("/");
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("Failed to download attachment");
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = att.filename || "attachment";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Failed to download attachment");
+    }
+  };
+
   const handleIframeLoad = () => {
     try {
       const doc = iframeRef.current?.contentWindow?.document;
@@ -1274,16 +1319,15 @@ export default function EmailPage() {
                             {formatBytes(att.size)}
                           </div>
                         </div>
-                      <a
-                          href={att.download_url || `${API}/api/gmail/email/${id}/attachments/${att.attachment_id}`}
-                          target="_blank"
-                          rel="noreferrer"
+                      <button
+                          type="button"
+                          onClick={() => handleAttachmentDownload(att)}
                           title="Download"
                           className="flex items-center justify-center gap-1 self-start rounded-full border border-[#dadce0] px-2.5 py-1 text-[11px] text-[#5f6368] opacity-0 transition group-hover:opacity-100 hover:bg-[#f1f3f4]"
                         >
                           <Download size={12} />
                           Download
-                        </a>
+                        </button>
                       </div>
                     );
                   })}

@@ -22,9 +22,6 @@ const NAV_ITEMS = [
   { id: 'sent', label: 'Sent', icon: Send, badge: 12 },
   { id: 'drafts', label: 'Draft', icon: Mail, badge: 12 },
   { id: 'chat', label: 'AI Assistant', icon: MessageSquare, isAI: true },
-  { id: 'workflows', label: 'AI Workflows', icon: Zap, isAI: true },
-  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-  { id: 'notifications', label: 'Notifications', icon: Bell, badge: 3 },
   { id: 'search', label: 'Search', icon: Search },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];

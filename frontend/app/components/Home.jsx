@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import Analytics from "../analytics/page";
-import PreferencesPage from "./Preferences";
 import {
     ArrowRight,
     Bot,
@@ -25,58 +23,9 @@ import {
     ShieldCheck,
 } from "lucide-react";
 import MessagesCard from "./MessageCard";
-import PreferenceCard from "./PreferenceCard";
+import PreferencesPage from "./Preferences";
 
-export const preferences = [
-    {
-        id: 1,
-        title: "Reply Tone",
-        value: "Professional & Friendly",
-        description: "All replies should be polite and professional.",
-        icon: MessageSquareText,
-        color: "#4285F4",
-    },
-    {
-        id: 2,
-        title: "Email Length",
-        value: "Medium",
-        description: "Keep replies concise but informative.",
-        icon: PenSquare,
-        color: "#34A853",
-    },
-    {
-        id: 3,
-        title: "Signature",
-        value: "Regards,\nNadeem Mushtaq",
-        description: "Automatically append to every email.",
-        icon: Signature,
-        color: "#FBBC05",
-    },
-    {
-        id: 4,
-        title: "Language",
-        value: "English",
-        description: "Default language for composing emails.",
-        icon: Languages,
-        color: "#A142F4",
-    },
-    {
-        id: 5,
-        title: "Meeting Replies",
-        value: "Suggest Afternoon",
-        description: "Recommend afternoon time slots by default.",
-        icon: CalendarClock,
-        color: "#00ACC1",
-    },
-    {
-        id: 6,
-        title: "Safety",
-        value: "Ask Before Sending",
-        description: "Require confirmation before sending emails.",
-        icon: ShieldCheck,
-        color: "#EA4335",
-    },
-];
+
 const iconMap = {
     database: Database,
     mail: Mail,
@@ -365,7 +314,6 @@ export default function Home({ user }) {
                 </div>
 
                 <PreferencesPage />
-                <Analytics />
 
             </section>
         </main>

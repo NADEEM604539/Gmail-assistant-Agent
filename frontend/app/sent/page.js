@@ -94,6 +94,12 @@ export default function SentPage() {
         },
       })
 
+      if (res.status === 401 || res.status === 403) {
+        window.localStorage.removeItem('access_token')
+        router.push('/')
+        throw new Error('Please sign in again.')
+      }
+
       if (!res.ok) {
         throw new Error(`Request failed with status ${res.status}`)
       }
