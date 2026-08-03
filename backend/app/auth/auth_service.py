@@ -7,7 +7,6 @@ from fastapi import HTTPException
 from sqlalchemy import text
 from app.auth.jwt.service import create_access_token
 from app.gmail.gmail_service import GmailService
-from app.gmail.gmail import registerEmailLoad
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
@@ -95,7 +94,6 @@ def registerUser(user, refresh_token, db):
     WHERE email = :email
     """)
     User=  db.execute(select_query, {"email": user["email"]}).mappings().first()
-    data = registerEmailLoad(user_id=User.id, token= refresh_token, db= db)
     payload = {
                "user_id":User.id,
                "name":user['name'],
