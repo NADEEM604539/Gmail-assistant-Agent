@@ -1,6 +1,14 @@
+from __future__ import annotations
+
+import re
+
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
+from openai import BadRequestError
+
 from app.chatbot.agent.tools import gmail_tools  
+from app.chatbot.agent.llm.error_handling import build_agent_error_response
+from app.gmail.reply_service import send_email as _send_email
 
 
 llm = ChatOpenAI(
@@ -36,24 +44,126 @@ def _extract_token_usage(message):
         "total_tokens": int(usage.get("total_tokens", 0) or 0),
     }
 
-def call_gmail_Agent(user_id: int, query: str, message_ids:list[str]):
-    result = gmail_agent.invoke(
-        {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        f"Help the authenticated Gmail user with user_id={user_id}. "
-                        "Use tools when needed, ask for missing identifiers, and only act on this user's data."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"message_ids={message_ids}. {query}",
-                },
-            ]
-        }
+
+def _normalize_query(query: str) -> str:
+    lines = [line.strip() for line in query.splitlines() if line.strip()]
+    filtered = [line for line in lines if not line.lower().startswith(("i’m ready to review", "i'm ready to review", "i am ready to review"))]
+    return " ".join(filtered).strip()
+
+
+def _extract_direct_email_target(query: str) -> str | None:
+    match = re.search(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b", query)
+    return match.group(0) if match else None
+
+
+def _extract_direct_email_body(query: str) -> str:
+    text = query.strip()
+    patterns = [
+        r"(?:that|saying|says|telling(?: him| her| them)? that|reminding(?: him| her| them)? that)\s+(.*)$",
+        r"(?:about|regarding)\s+(.*)$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            candidate = match.group(1).strip().rstrip(".")
+            if candidate:
+                return candidate
+	
+    return text
+
+
+def _build_subject(body: str) -> str:
+    snippet = body.split(".")[0].strip()
+    if not snippet:
+        return "Follow-up"
+    keywords = ["gym", "meeting", "follow-up", "reminder", "update", "check-in"]
+    for keyword in keywords:
+        if keyword in snippet.lower():
+            return f"{keyword.title()} reminder"
+    return "Quick follow-up"
+
+
+def _maybe_send_direct_email(user_id: int, query: str) -> dict | None:
+    normalized_query = _normalize_query(query)
+    lowered = normalized_query.lower()
+    if "send an email" not in lowered and not lowered.startswith("email "):
+        return None
+
+    recipient = _extract_direct_email_target(normalized_query)
+    if not recipient:
+        return None
+
+    body = _extract_direct_email_body(normalized_query)
+    subject = _build_subject(body)
+    result = _send_email(
+        user_id=user_id,
+        subject=subject,
+        body=body,
+        to=[recipient],
     )
+
+    return {
+        "content": f"Sent email to {recipient} with subject '{subject}'.",
+        "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+        },
+        "backend_details": {
+            "agent": "gmail",
+            "user_id": user_id,
+            "query": query,
+            "message_ids": [],
+            "tool_names": ["send_email"],
+            "tool_call_count": 1,
+            "direct_send": True,
+            "recipient": recipient,
+            "subject": subject,
+            "body_preview": body[:200],
+            "send_result": result,
+        },
+        "tool_calls": [
+            {
+                "name": "send_email",
+                "args": {
+                    "user_id": user_id,
+                    "subject": subject,
+                    "body": body,
+                    "to": [recipient],
+                },
+                "id": None,
+                "type": "tool_call",
+            }
+        ],
+        "messages": [],
+    }
+
+def call_gmail_Agent(user_id: int, query: str, message_ids:list[str]):
+    direct_send = _maybe_send_direct_email(user_id=user_id, query=query)
+    if direct_send is not None:
+        return direct_send
+
+    try:
+        result = gmail_agent.invoke(
+            {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            f"Help the authenticated Gmail user with user_id={user_id}. "
+                            "Use tools when needed, ask for missing identifiers, and only act on this user's data. "
+                            "If the request is a straightforward email send or draft, keep the wording simple and avoid echoing the user's prompt verbatim."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"message_ids={message_ids}. { _normalize_query(query) }",
+                    },
+                ]
+            }
+        )
+    except BadRequestError as error:
+        return build_agent_error_response("gmail", user_id, query, error, message_ids)
 
     messages = result.get("messages", [])
     tool_calls = []
