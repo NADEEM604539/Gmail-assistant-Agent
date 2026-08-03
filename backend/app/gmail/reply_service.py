@@ -12,7 +12,7 @@ import base64
 from dotenv import load_dotenv
 from sqlalchemy import text
 
-from app.chatbot.agent.objects import DraftEmail
+from app.chatbot.agent.objects import DraftEmail, EmailRecipient
 from app.database.database import SessionLocal
 from app.gmail.gmail_service import GmailService
 
@@ -63,13 +63,25 @@ def forward_email(message_id: str, user_id: int, to, body: str, attachments=None
 def send_email(user_id: int, subject: str, body: str, to, cc=None, bcc=None, attachments=None):
     """Send a brand-new email immediately."""
     gmail = _get_gmail_service(user_id)
+
+    def _normalize_recipients(values):
+        normalized = []
+        for value in values or []:
+            if isinstance(value, EmailRecipient):
+                normalized.append(value)
+            elif isinstance(value, dict):
+                normalized.append(EmailRecipient(**value))
+            else:
+                normalized.append(EmailRecipient(email=str(value), name=None))
+        return normalized
+
     draft = DraftEmail(
         subject=subject,
         body=body,
         tone="professional",
-        to=to or [],
-        cc=cc or [],
-        bcc=bcc or [],
+        to=_normalize_recipients(to),
+        cc=_normalize_recipients(cc),
+        bcc=_normalize_recipients(bcc),
         attachments=attachments or [],
     )
 

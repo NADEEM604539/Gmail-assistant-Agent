@@ -2,10 +2,8 @@ from app.database.database import SessionLocal
 from sqlalchemy import text
 from fastapi import UploadFile, HTTPException
 from app.embeddings.perform_embedding import generate_vector_embeddings, delete_document
-from langchain.tools import tool
 import os
 
-@tool
 def get_embed_docs(user_id:int):
     """
     This get all the documents uploaded for a specific user knowlege source for implementing RAG
@@ -94,7 +92,6 @@ def add_embed_docs(file: UploadFile, user_id: int, purpose: str = None):
     finally:
         db.close()
 
-@tool
 def delete_doc(user_id: int, doc_id: int):
     """
     Deletes a document and all of its associated vector embeddings.
