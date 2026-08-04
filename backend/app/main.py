@@ -44,6 +44,19 @@ async def shutDown():
 def backend():
     return {'Hello world'}
 
+@app.get('/db-check')
+def db_check():
+    try:
+        with engine.connect() as connection:
+            result = connection.execute(text("SELECT 2 + 2 AS result")).scalar_one()
+        return {
+            "db_connected": True,
+            "query": "SELECT 2 + 2 AS result",
+            "result": result,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"DB check failed: {str(exc)}")
+
 app.include_router(auth_router, prefix='/api')
 app.include_router(gmail_router, prefix='/api')
 app.include_router(stats_router, prefix='/api')
