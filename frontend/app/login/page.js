@@ -39,14 +39,14 @@ export default function LoginPage() {
         }
 
         const data = await response.json();
-        const accessToken = data?.access_token;
+        const accessToken = data?.access_token || data?.token;
 
         if (!accessToken) {
           throw new Error("Access token missing in response");
         }
 
-        localStorage.setItem("access_token", accessToken);
-        router.push('/')
+        window.localStorage.setItem("access_token", accessToken);
+        router.replace('/');
       } catch (error) {
         console.error(error);
       }
