@@ -7,7 +7,7 @@ def start_scheduler():
     scheduler.add_job(
         autoReply,
         trigger="interval",
-        seconds=10,
+        minutes=10,
         id="gmail_auto_reply",
         replace_existing=True,
     )
