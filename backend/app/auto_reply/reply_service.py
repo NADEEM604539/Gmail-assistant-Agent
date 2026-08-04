@@ -90,7 +90,8 @@ def reply_mails_by_user(user_id: int, db):
     filter_and_send_messages(
         gmail= gmail,
         start_history_id=user.last_history_id,
-        user_details= user_details
+        user_details= user_details,
+        user_id= user_id
     )
 
     # Update history_id after processing

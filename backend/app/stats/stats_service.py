@@ -8,7 +8,7 @@ def get_dashboard_stats(user_id: int):
         SELECT
             (
                 SELECT COUNT(*)
-                FROM emails
+                FROM ai_email_actions
                 WHERE user_id = :user_id
             ) AS accessible_emails,
 
@@ -16,17 +16,9 @@ def get_dashboard_stats(user_id: int):
                 SELECT COUNT(*)
                 FROM ai_email_actions
                 WHERE user_id = :user_id
-                AND action_type = 'draft_created'
+                AND action_type = 'reply_generated'
                 AND status = 'completed'
-            ) AS ai_drafts_created,
-
-            (
-                SELECT COUNT(*)
-                FROM ai_email_actions
-                WHERE user_id = :user_id
-                AND action_type = 'email_sent'
-                AND status = 'completed'
-            ) AS agent_sent_emails
+            ) AS reply_generated
     """)
 
     result = db.execute(
@@ -41,23 +33,23 @@ def get_dashboard_stats(user_id: int):
     return [
         {
             "id": 1,
-            "title": "Accessible by Mailgent",
+            "title": "Total AI actions",
             "value": result.accessible_emails,
             "icon": "database",
             "color": "#34A853"
         },
         {
             "id": 2,
-            "title": "AI Drafts Created",
-            "value": result.ai_drafts_created,
-            "icon": "mail",
+            "title": "Total Auto-Replies",
+            "value": result.reply_generated,
+            "icon": "send",
             "color": "#FBBC05"
         },
         {
             "id": 3,
-            "title": "Agent Sent Emails",
-            "value": result.agent_sent_emails,
-            "icon": "send",
+            "title": "others",
+            "value": result.accessible_emails - result.reply_generated,
+            "icon": "mail",
             "color": "#7C3AED"
         }
     ]
