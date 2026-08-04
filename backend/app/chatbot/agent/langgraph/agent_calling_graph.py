@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 from langgraph.graph import END, START, StateGraph
-
+from datetime import date
 from app.chatbot.agent.RAG_agent import callagent as retrieval_agent
 from app.chatbot.agent.gmail_agent import call_gmail_Agent
 from app.chatbot.agent.knowledge_agent import call_knowledge_Agent
 from app.chatbot.agent.langgraph.state_calling import Workflow
+from langgraph.checkpoint.memory import MemorySaver
 
-
+# Initialize checkpointer
+checkpointer = MemorySaver()
 def _detect_intents(prompt: str) -> list[str]:
 	text = prompt.lower()
 	intents: list[str] = []
@@ -67,6 +69,32 @@ def _route(state: Workflow) -> Literal["gmail", "knowledge", "retrieval", "multi
 	return intents[0]
 
 
+def _normalize_history(history: list[dict[str, Any]] | None) -> list[dict[str, str]]:
+	normalized: list[dict[str, str]] = []
+	for entry in history or []:
+		if not isinstance(entry, dict):
+			continue
+		role = entry.get("role") or entry.get("type")
+		content = entry.get("content")
+		if role and content:
+			normalized.append({"role": str(role), "content": str(content)})
+	return normalized
+
+
+def _append_conversation_turn(state: Workflow, result: dict) -> Workflow:
+	conversation_history = _normalize_history(state.get("conversation_history"))
+	current_prompt = (state.get("user_prompt") or "").strip()
+	if current_prompt:
+		conversation_history.append({"role": "user", "content": current_prompt})
+	assistant_content = (result.get("content") or "").strip()
+	if assistant_content:
+		conversation_history.append({"role": "assistant", "content": assistant_content})
+	return {
+		**state,
+		"conversation_history": conversation_history,
+	}
+
+
 def _merge_agent_result(state: Workflow, agent_name: str, result: dict) -> Workflow:
 	agents_called = list(state.get("agents_called") or [])
 	agents_called.append(
@@ -85,8 +113,9 @@ def _merge_agent_result(state: Workflow, agent_name: str, result: dict) -> Workf
 			}
 		)
 
+	state_with_history = _append_conversation_turn(state, result)
 	return {
-		**state,
+		**state_with_history,
 		"selected_agent": agent_name,
 		"content": result.get("content", ""),
 		"final_response": result.get("content", ""),
@@ -141,8 +170,15 @@ def _combine_results(state: Workflow, results: list[dict]) -> Workflow:
 			combined_sections.append(f"{pretty_name}:\n{content}")
 
 	combined_content = "\n\n".join(combined_sections)
+	conversation_history = _normalize_history(state.get("conversation_history"))
+	current_prompt = (state.get("user_prompt") or "").strip()
+	if current_prompt:
+		conversation_history.append({"role": "user", "content": current_prompt})
+	if combined_content:
+		conversation_history.append({"role": "assistant", "content": combined_content})
 	return {
 		**state,
+		"conversation_history": conversation_history,
 		"selected_agent": "multi",
 		"selected_agents": selected_agents,
 		"content": combined_content,
@@ -172,6 +208,7 @@ def _gmail_node(state: Workflow) -> Workflow:
 		user_id=state["user_id"],
 		query=state["user_prompt"],
 		message_ids=state.get("message_ids") or [],
+		conversation_history=_normalize_history(state.get("conversation_history")),
 	)
 	return _merge_agent_result(state, "gmail", result)
 
@@ -180,6 +217,7 @@ def _knowledge_node(state: Workflow) -> Workflow:
 	result = call_knowledge_Agent(
 		user_id=state["user_id"],
 		query=state["user_prompt"],
+		conversation_history=_normalize_history(state.get("conversation_history")),
 	)
 	return _merge_agent_result(state, "knowledge", result)
 
@@ -188,6 +226,7 @@ def _retrieval_node(state: Workflow) -> Workflow:
 	result = retrieval_agent(
 		user_id=state["user_id"],
 		query=state["user_prompt"],
+		conversation_history=_normalize_history(state.get("conversation_history")),
 	)
 	return _merge_agent_result(state, "retrieval", result)
 
@@ -201,6 +240,7 @@ def _multi_node(state: Workflow) -> Workflow:
 				call_knowledge_Agent(
 					user_id=state["user_id"],
 					query=state["user_prompt"],
+					conversation_history=_normalize_history(state.get("conversation_history")),
 				)
 			)
 		elif intent == "gmail":
@@ -209,6 +249,7 @@ def _multi_node(state: Workflow) -> Workflow:
 					user_id=state["user_id"],
 					query=state["user_prompt"],
 					message_ids=state.get("message_ids") or [],
+					conversation_history=_normalize_history(state.get("conversation_history")),
 				)
 			)
 		elif intent == "retrieval":
@@ -216,6 +257,7 @@ def _multi_node(state: Workflow) -> Workflow:
 				retrieval_agent(
 					user_id=state["user_id"],
 					query=state["user_prompt"],
+					conversation_history=_normalize_history(state.get("conversation_history")),
 				)
 			)
 
@@ -238,10 +280,11 @@ graph.add_edge("knowledge", END)
 graph.add_edge("retrieval", END)
 graph.add_edge("multi", END)
 
-chat_graph = graph.compile()
+chat_graph = graph.compile(checkpointer=checkpointer)
 
 
 def run_chat_graph(user_id: int, query: str, message_ids: list[str] | None = None) -> Workflow:
+	config = {"configurable": {"thread_id": f"{user_id}_{date.today()}"}}
 	return chat_graph.invoke(
 		{
 			"user_id": user_id,
@@ -252,5 +295,6 @@ def run_chat_graph(user_id: int, query: str, message_ids: list[str] | None = Non
 			"agents_called": [],
 			"tools_called": [],
 			"agent_results": [],
-		}
+		},
+		config=config,
 	)

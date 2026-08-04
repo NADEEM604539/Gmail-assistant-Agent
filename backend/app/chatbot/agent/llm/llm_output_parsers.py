@@ -75,7 +75,7 @@ def shouldReply(email: Short_email_parser):
     response = llm.invoke(prompt)
     return ShouldReply_parser.parse(response.content).reply
 
-def createReplyEmail(request:Short_email_parser, user_details:User):
-    prompt = EmailReply_template.format(user_details=user_details, email=request)
+def createReplyEmail(request:Short_email_parser, user_details:User, preferences:any):
+    prompt = EmailReply_template.format(user_details=user_details, email=request, preferences=preferences)
     response = llm.invoke(prompt)
     return ReplyEmail_parser.parse(response.content)

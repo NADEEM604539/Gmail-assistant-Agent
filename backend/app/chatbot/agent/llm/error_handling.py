@@ -17,8 +17,8 @@ def build_agent_error_response(
 
 	if is_content_filter:
 		content = (
-			"I couldn\'t complete that request because the language model provider filtered the prompt. "
-			"Please rephrase the request and try again."
+			"I couldn\'t complete that request. Sending Draft is not allowed to Agent."
+			"Please rephrase the request and try again. Sending drafts is not allowed; you can directly send an email or update a draft instead."
 		)
 	else:
 		content = (

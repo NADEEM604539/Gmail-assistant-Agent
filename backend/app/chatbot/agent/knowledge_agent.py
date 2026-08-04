@@ -39,15 +39,29 @@ def _extract_token_usage(message):
         "total_tokens": int(usage.get("total_tokens", 0) or 0),
     }
 
-def call_knowledge_Agent(user_id:int, query:str):
+def call_knowledge_Agent(user_id:int, query:str, conversation_history: list[dict] | None = None):
+    history_messages = []
+    for item in conversation_history or []:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = item.get("content")
+        if role and content:
+            history_messages.append({"role": role, "content": content})
+
     try:
         result = knowledge_agent.invoke(
             {
                 "messages": [
                     {
                         "role": "system",
-                        "content": f"Use tools to answer the user's question for user_id={user_id}. Only use that user's data.",
+                        "content": (
+                            f"Use tools to answer the user's question for user_id={user_id}. Only use that user's data. "
+                            "You MUST strictly follow the user's stored preferences. Treat preferences as hard constraints, not suggestions. "
+                            "Before answering, consult the preference tools if preferences are relevant so the response follows the user's configured settings exactly."
+                        ),
                     },
+                    *history_messages,
                     {
                         "role": "user",
                         "content": query,

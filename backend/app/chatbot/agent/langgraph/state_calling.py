@@ -14,6 +14,7 @@ class Workflow(TypedDict, total=False):
     backend_details: dict[str, Any]
     tool_calls: list[dict[str, Any]]
     messages: list[dict[str, Any]]
+    conversation_history: list[dict[str, str]]
     agents_called: list[dict[str, Any]]
     tools_called: list[dict[str, Any]]
     token_usage: dict[str, int]

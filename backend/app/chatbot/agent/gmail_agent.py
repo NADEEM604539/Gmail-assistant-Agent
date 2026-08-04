@@ -9,6 +9,7 @@ from openai import BadRequestError
 from app.chatbot.agent.tools import gmail_tools  
 from app.chatbot.agent.llm.error_handling import build_agent_error_response
 from app.gmail.reply_service import send_email as _send_email
+from app.database.ai_action_service import log_ai_email_action
 
 
 llm = ChatOpenAI(
@@ -86,7 +87,11 @@ def _build_subject(body: str) -> str:
 def _maybe_send_direct_email(user_id: int, query: str) -> dict | None:
     normalized_query = _normalize_query(query)
     lowered = normalized_query.lower()
-    if "send an email" not in lowered and not lowered.startswith("email "):
+    if (
+        "send an email" not in lowered
+        and "send email" not in lowered
+        and not lowered.startswith("email ")
+    ):
         return None
 
     recipient = _extract_direct_email_target(normalized_query)
@@ -100,6 +105,16 @@ def _maybe_send_direct_email(user_id: int, query: str) -> dict | None:
         subject=subject,
         body=body,
         to=[recipient],
+    )
+
+    log_ai_email_action(
+        user_id=user_id,
+        action_type="email_sent",
+        status="completed",
+        input_text=body,
+        output_text=str(result),
+        metadata={"subject": subject, "to": [recipient]},
+        email_id=result.get("id") if isinstance(result, dict) else None,
     )
 
     return {
@@ -138,10 +153,19 @@ def _maybe_send_direct_email(user_id: int, query: str) -> dict | None:
         "messages": [],
     }
 
-def call_gmail_Agent(user_id: int, query: str, message_ids:list[str]):
+def call_gmail_Agent(user_id: int, query: str, message_ids:list[str], conversation_history: list[dict] | None = None):
     direct_send = _maybe_send_direct_email(user_id=user_id, query=query)
     if direct_send is not None:
         return direct_send
+
+    history_messages = []
+    for item in conversation_history or []:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = item.get("content")
+        if role and content:
+            history_messages.append({"role": role, "content": content})
 
     try:
         result = gmail_agent.invoke(
@@ -152,9 +176,12 @@ def call_gmail_Agent(user_id: int, query: str, message_ids:list[str]):
                         "content": (
                             f"Help the authenticated Gmail user with user_id={user_id}. "
                             "Use tools when needed, ask for missing identifiers, and only act on this user's data. "
+                            "You MUST strictly follow the user's stored preferences. Treat preferences as hard constraints, not suggestions. "
+                            "Before acting or replying, consult the preference tools if preferences are relevant so the reply or action respects the user's configured settings exactly. "
                             "If the request is a straightforward email send or draft, keep the wording simple and avoid echoing the user's prompt verbatim."
                         ),
                     },
+                    *history_messages,
                     {
                         "role": "user",
                         "content": f"message_ids={message_ids}. { _normalize_query(query) }",
