@@ -18,6 +18,7 @@ langchain_core
 langchain_openai
 apscheduler
 pinecone
+pypdf
 langchain-pinecone
 langgraph
 numpy
@@ -25,5 +26,3 @@ bs4
 python-multipart
 huggingface_hub
 langchain_text_splitters
-langchain_huggingface
-sentence-transformers
