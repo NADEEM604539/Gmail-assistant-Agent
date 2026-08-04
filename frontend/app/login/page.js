@@ -157,13 +157,13 @@ export default function LoginPage() {
 
               <p className="mt-8 text-center text-[13px] leading-6 text-[#80868B]">
                 By continuing, you agree to Mailgent&apos;s{" "}
-                <span className="cursor-pointer font-medium text-[#4285F4] hover:underline">
+                <Link href="/terms" className="font-medium text-[#4285F4] hover:underline">
                   Terms
-                </span>{" "}
+                </Link>{" "}
                 and{" "}
-                <span className="cursor-pointer font-medium text-[#4285F4] hover:underline">
+                <Link href="/privacy" className="font-medium text-[#4285F4] hover:underline">
                   Privacy Policy
-                </span>
+                </Link>
               </p>
             </div>
           </div>
