@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS `gmail_accounts` (
   `provider` VARCHAR(128) NOT NULL DEFAULT 'google',
   `is_primary` BOOLEAN NOT NULL DEFAULT FALSE,
   `status` ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
-  `auto_reply` BOOLEAN NOT NULL DEFAULT TRUE,
+  `auto_reply` BOOLEAN NOT NULL DEFAULT FALSE,
   `last_history_id` BIGINT UNSIGNED NULL,
   `last_auto_reply_check_at` DATETIME NULL,
   `connected_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

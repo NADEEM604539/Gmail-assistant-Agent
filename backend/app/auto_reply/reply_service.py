@@ -80,18 +80,24 @@ def reply_mails_by_user(user_id: int, db):
         WHERE id= :id
 """)
     current_user = db.execute(query, {
-        "id":user_id
+        "id": user_id
     }).mappings().first()
 
+    if not current_user:
+        return {
+            "success": False,
+            "message": "User details not found for auto reply processing."
+        }
+
     user_details = User(
-        name= current_user.name,
-        email= current_user.email
+        name=current_user["name"],
+        email=current_user["email"]
     )
     filter_and_send_messages(
-        gmail= gmail,
-        start_history_id=user.last_history_id,
-        user_details= user_details,
-        user_id= user_id
+        gmail=gmail,
+        start_history_id=user["last_history_id"],
+        user_details=user_details,
+        user_id=user_id
     )
 
     # Update history_id after processing

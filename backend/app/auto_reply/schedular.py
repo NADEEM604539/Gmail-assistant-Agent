@@ -1,9 +1,13 @@
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 from app.auto_reply.reply import autoReply
 
-scheduler = AsyncIOScheduler()
+scheduler = BackgroundScheduler()
+
 
 def start_scheduler():
+    if scheduler.running:
+        return
+
     scheduler.add_job(
         autoReply,
         trigger="interval",
@@ -14,5 +18,7 @@ def start_scheduler():
 
     scheduler.start()
 
+
 def stop_schedular():
-    scheduler.shutdown()
+    if scheduler.running:
+        scheduler.shutdown()

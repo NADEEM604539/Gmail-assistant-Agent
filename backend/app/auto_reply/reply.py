@@ -10,13 +10,12 @@ def autoReply():
                WHERE auto_reply =:auto_reply AND status = :status
             """)
     users = db.execute(query, {
-        "auto_reply":True,
-        "status":"ACTIVE"
-    }).fetchall()
+        "auto_reply": True,
+        "status": "ACTIVE"
+    }).mappings().fetchall()
 
     for user in users:
-        reply_mails_by_user(user.user_id, db)
-
+        reply_mails_by_user(user["user_id"], db)
 
     db.close()
     return {
