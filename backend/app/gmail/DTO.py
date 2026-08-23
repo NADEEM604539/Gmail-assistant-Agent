@@ -87,3 +87,7 @@ class User(BaseModel):
     name: str
     email: str
 
+class QalamResultRequest(BaseModel):
+    send_to:str
+    email:str
+

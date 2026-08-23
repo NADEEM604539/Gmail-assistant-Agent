@@ -26,7 +26,10 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://gmail-assistant-eight.vercel.app"],
+    allow_origins=[
+        "https://gmail-assistant-eight.vercel.app",
+        "http://127.0.0.1:8000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

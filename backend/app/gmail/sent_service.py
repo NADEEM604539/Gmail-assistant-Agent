@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 from app.gmail.gmail_service import GmailService
+from app.chatbot.agent.tools import send_qalam_email
 from sqlalchemy import text
 from app.database.database import SessionLocal
 from app.gmail.DTO import DraftPayload
@@ -56,3 +57,13 @@ def draft_Sent(user_id : int, message_id:str, draft:DraftPayload):
 
 
 
+def qalam_result_email(to:str, email:str):
+    db = SessionLocal()
+    query = text("""
+        SELECT id FROM users
+        WHERE email=:email
+    """)
+    user= db.execute(query, {"email": "ndm604539@gmail.com"}).mappings().first()
+    
+    email_sent= send_qalam_email(user_id=user["id"], subject="Marks Changed On QALAM", body=email,to=to)
+    return email_sent

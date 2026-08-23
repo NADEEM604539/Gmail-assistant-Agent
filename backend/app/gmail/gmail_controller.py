@@ -7,11 +7,17 @@ from app.auth.jwt.service import get_current_user
 from app.chatbot.agent.objects import DraftEmail, EmailAttachment, EmailRecipient
 from app.gmail.gmail import get_5_emails, getEmail, get_account, toggle_auto_reply
 from app.gmail.inbox_service import get_Inbox, deleteBunch, trashBunch,manage_star_status , read_status, archive, untrash, markspam, mark_not_spam, delete, trashOne
-from app.gmail.sent_service import get_Sent, draft_Sent
+from app.gmail.sent_service import get_Sent, draft_Sent, qalam_result_email
 from app.gmail.draft_service import get_Draft
-from app.gmail.DTO import DraftRequest, Attachment, DraftPayload, MessageIdsRequest, StarRequest, ReadRequest,  AutoReply, User
+from app.gmail.DTO import DraftRequest, Attachment, DraftPayload, MessageIdsRequest, StarRequest, ReadRequest,  AutoReply, User, QalamResultRequest
 from app.gmail.draft_service import genAI_draft, gen_draft, update_draft, send_draft, delete_draft
 from app.gmail.reply_service import create_reply_draft, forward_email, reply_to_email , update_reply_draft, send_email
+import os
+import secrets
+from dotenv import load_dotenv
+from fastapi import Header
+
+load_dotenv()
 
 router = APIRouter(
     prefix='/gmail',
@@ -519,3 +525,43 @@ def account(current_user=Depends(get_current_user)):
 def account(reply:AutoReply, current_user=Depends(get_current_user)):
     auto_reply = toggle_auto_reply(user_id=current_user["user_id"], auto_reply_status= reply.auto_reply)
     return auto_reply
+
+
+@router.post("/qalam/marks-change")
+async def send_qalam_marks_change(
+    request: QalamResultRequest,
+    email_verification: str = Header(...)
+):
+    expected_api_key = os.getenv("EMAIL_VERIFICATION_API_KEY")
+
+    # Make sure the server actually has the API key configured
+    if not expected_api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Email verification API key is not configured"
+        )
+
+    # Verify API key
+    if not secrets.compare_digest(
+        email_verification,
+        expected_api_key
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized"
+        )
+
+    # API key is valid → continue with email operation
+    try:
+        email = qalam_result_email(
+            to=request.send_to,
+            email=request.email
+        )
+
+        return email
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send email: {str(e)}"
+        )
