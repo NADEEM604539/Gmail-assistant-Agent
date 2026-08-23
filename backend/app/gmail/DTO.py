@@ -88,6 +88,6 @@ class User(BaseModel):
     email: str
 
 class QalamResultRequest(BaseModel):
-    send_to:str
+    send_to: list[str]
     email:str
 
