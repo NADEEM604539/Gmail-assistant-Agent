@@ -11,7 +11,7 @@ from app.gmail.gmail_controller import router as gmail_router
 from app.stats.stats_controller import router as stats_router
 from app.chatbot.chatbot_contoller import router as chat_router
 from app.preferences.preferences_controller import router as preferences_router
-from app.auto_reply.schedular import start_scheduler, stop_schedular
+# from app.auto_reply.schedular import start_scheduler, stop_schedular
 from app.embeddings.embed_controller import router as embed_router
 from app.search.search_controller import router as search_router
 
@@ -32,13 +32,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-async def starter():
-    start_scheduler()
+# @app.on_event("startup")
+# async def starter():
+#     start_scheduler()
 
-@app.on_event("shutdown")
-async def shutDown():
-    stop_schedular()
+# @app.on_event("shutdown")
+# async def shutDown():
+#     stop_schedular()
 
 @app.get('/')
 def backend():
