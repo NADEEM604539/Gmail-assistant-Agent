@@ -57,7 +57,7 @@ def draft_Sent(user_id : int, message_id:str, draft:DraftPayload):
 
 
 
-def qalam_result_email(to:str, email:str):
+def qalam_result_email(to: list[str], email:str):
     db = SessionLocal()
     query = text("""
         SELECT id FROM users
