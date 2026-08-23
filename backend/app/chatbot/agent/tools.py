@@ -557,20 +557,6 @@ def delete(user_id: int, message_id: str):
     return result
 
 
-def send_qalam_email(user_id: int, subject: str, body: str, to, cc=None, bcc=None, attachments=None):
-    """Send a new email immediately."""
-    result = _send_email(user_id=user_id, subject=subject, body=body, to=to, cc=cc, bcc=bcc, attachments=attachments)
-    log_ai_email_action(
-        user_id=user_id,
-        action_type="email_sent",
-        status="completed",
-        input_text=body,
-        output_text=str(result),
-        metadata={"subject": subject, "to": to, "cc": cc or [], "bcc": bcc or []},
-    )
-    return result
-
-
 @tool
 def trashOne(user_id: int, message_id: str):
     """Move one Gmail message to trash."""
