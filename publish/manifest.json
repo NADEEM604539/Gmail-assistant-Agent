@@ -1,0 +1,29 @@
+{
+  "schema": 2,
+  "ui": {
+    "bundle": {
+      "format": "static-spa",
+      "entry": "index.html",
+      "external_origins": [
+        "https://gmail-assistant-eight.vercel.app"
+      ]
+    },
+    "views": [
+      {
+        "name": "main",
+        "title": "Gmail Assistant",
+        "default": true,
+        "default_size": { "w": 800, "h": 600 }
+      }
+    ],
+    "host_api": {
+      "storage": ["get", "set"],
+      "window": ["set_title", "ready"]
+    }
+  },
+  "dev": {
+    "name": "Gmail Assistant Agent",
+    "slug": "gmail-assistant-agent",
+    "version": "1.0.0"
+  }
+}

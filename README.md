@@ -467,3 +467,41 @@ auto-reply scheduler is currently disabled at startup, chat history persistence 
 exist but aren't wired up (memory is in-process only), and there's some minor code
 duplication/leftover artifacts (duplicate venv folder, a `parse_recipients` helper
 defined twice).
+
+---
+
+## 7. Anna AI OS Integration
+
+**Gmail Assistant Agent** has been published as a live, user-facing App on **Anna AI OS**,
+qualifying it for the Anna AI App Builder Program (via DoraHacks).
+
+### What was done
+
+1. **Environment setup & developer identity**
+   - Configured the local environment with `uv` (Python manager) and `Node.js v22`.
+   - Established a developer namespace on Anna under the handle **`@nadeemmushtaq`**.
+   - Authenticated the local environment with the Anna Partners network via device-flow login.
+
+2. **App scaffolding & manifest configuration**
+   - Initialized the project with the **Anna App CLI** (`anna-app`).
+   - Wrote a custom `manifest.json` (schema v2) defining the app's identity, permissions,
+     and UI behavior.
+   - Implemented a **remote-URL bridge** so the app loads the live-deployed Next.js
+     frontend (`https://gmail-assistant-eight.vercel.app`) inside the secure Anna sandbox.
+
+3. **Validation & publishing**
+   - Passed schema and ACL validation via the `anna-app validate` suite.
+   - Staged and cut **version 0.1.0**, uploading the app bundle to Anna's infrastructure.
+   - Published the app to the **Anna Marketplace**.
+
+### Official Anna App link
+
+[https://anna.partners/@nadeemmushtaq/gmail-assistant-agent](https://anna.partners/@nadeemmushtaq/gmail-assistant-agent)
+
+### Program alignment
+
+- **Fully runnable** — a live, functional app inside Anna OS, not just a repository.
+- **User-facing interface** — the existing Next.js UI, running inside the Anna sandbox.
+- **Backend logic** — the same Python/FastAPI agentic backend described above.
+- **Ready for MAU** — prepared for Qualified App Runs via Anna's native execution
+  infrastructure, for the Anna AI App Builder Program's September Launch Boost.
